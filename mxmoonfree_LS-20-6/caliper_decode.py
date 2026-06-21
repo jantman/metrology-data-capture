@@ -12,6 +12,10 @@ Protocol (confirmed 2026-06-21 against 5 known LCD readings):
 
 All signal levels are ~3 V referenced to Pin 5 (battery negative). The caliper body is
 battery POSITIVE; do NOT connect Pin1/Pin4 to a logic input.
+
+CAVEAT: the caliper's "pre-" / "pre+" preset buttons offset the LCD display ONLY. The data
+port always transmits the raw measured value (relative to the active zero/origin) and ignores
+any preset offset, so the decoded value will not match the display when a preset is active.
 """
 from dataclasses import dataclass
 

@@ -1,3 +1,7 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# Blind-validation raw scope captures — result is documented in text (§0.5 / README),
+# kept out of git to avoid another ~12 MB of binaries.
+mxmoonfree_LS-20-6/gt_[A-F]_ch[12].bin

@@ -66,6 +66,18 @@ Confirmed end-to-end against the LCD at 5 known readings (0.00 mm, 10.00 mm, 100
 
 **Worked example (−20.00 mm):** frame `000010111110000000001000` → magnitude(b0–19)=2000, bit20=1 → −2000/100 = **−20.00 mm**. ✅
 
+> ⚠️ **Behavioral caveat — the `pre-` / `pre+` preset buttons are DISPLAY-ONLY.** These buttons (per the
+> caliper's documentation) add/subtract a preset offset to the **LCD reading only**; the serial data port
+> always transmits the **raw measured value** (relative to the active zero/origin), ignoring any preset
+> offset. **Consequence:** when a preset offset is active, the transmitted value will NOT match the LCD.
+> Any consuming software should treat the data-port value as ground truth and apply preset offsets itself
+> if it wants to mirror the display.
+
+**Validation — blind test (2026-06-21):** six positions (A–F) were set and recorded on paper *before*
+decoding, including mm, inch, negatives, and near-full-travel values. **A–E decoded to exact matches.**
+F was the same physical position as E but with a −0.23 mm `pre-` preset applied: the data port emitted the
+identical frame as E (display-only offset confirmed, as above). Net: **6/6 explained, decoder confirmed.**
+
 ---
 
 ## 1. What the port actually is

@@ -14,3 +14,5 @@ The data port is a proprietary ~3 V synchronous serial interface on a Micro-USB 
 - **`gt_*.bin`, `cap_*.bin`, `gt_log.csv`, `*.png`** — raw scope captures and rendered plots (the ground-truth evidence).
 
 **Quick reference:** Pin1=V+ (~3 V, body) · Pin2=CLOCK · Pin3=DATA · Pin4=V+ · Pin5=GND. 24-bit frame, LSB-first, read on clock rising edge, ~274 µs/bit, new frame every 107.2 ms. Bits 0–19 = magnitude, bit 20 = sign, bit 23 = inch flag; mm = magnitude/100, inch = magnitude/2000. **No level shifter needed** — wire straight to a 3.3 V MCU (never connect Pin1/Pin4). Next step: ESP32/RP2040 front-end.
+
+**Caveat:** the `pre-`/`pre+` preset buttons offset the **LCD only** — the data port always outputs the raw measured value and ignores the preset, so the wire value won't match the display when a preset is active. (Confirmed by a 6-position blind test: A–E exact, F = E's position with a −0.23 mm preset → identical frame to E.)
