@@ -86,6 +86,10 @@ DRO reverse-engineering work applies directly (see §8).
 
 ## 4. Pinout (suggested — VERIFY by continuity)
 
+> ⚠️ **Superseded for THIS unit — see §11.** The table below was carried over from an iGaging
+> *Absolute scale*; it has been **disproven on this micrometer** (pin 1 is NOT VDD; pins 4 *and*
+> 5 are GND; no rail is exposed on the connector). Kept for reference/contrast only.
+
 Micro-USB-B pin numbering: `1 = VBUS`, `2 = D-`, `3 = D+`, `4 = ID`, `5 = GND`.
 
 The mapping below was rung out by continuity on an iGaging **Absolute** scale board, and the
@@ -250,10 +254,143 @@ for the SPC-jack Absolute/Origin tools and will not work on this micrometer.
 
 ## 10. Open items to confirm on your unit
 
-- [ ] Measured VDD rail voltage (pin 1 ↔ pin 5, battery in).
-- [ ] Continuity-verified pin assignment for CLK (SSY) and DATA.
-- [ ] Whether pin 4 (ID) is connected at all.
-- [ ] Actual logic-high voltage on DATA under clock (scope).
+> Quick checklist below. The consolidated bench log, corrected pinout, what's been tried,
+> next steps, and the safety rationale live in **§11**.
+
+- [ ] Measured VDD rail voltage. **Bench note (this unit):** pin 1 ↔ pin 5 read **0 V**
+  with battery in — pin 1 is **NOT** the supply rail here (contradicts §4), and the connector
+  exposes no steady rail at all. The internal logic rail is **not on the connector**; measure
+  it instead **across decoupling cap C4/C5** (device ON) — that reading is the level-shift
+  reference + the safe clock-drive voltage. *(pending)*
+- **Teardown note (this unit):** accessible PCB side (battery/USB side) carries only passives
+  (R1/R2, C4/C5), two transistors (Q1/Q2), the Micro-USB jack, battery contacts, and a config
+  **solder-jumper matrix `J10/J11…J60/J61`** (some bridged, some open — selects pinout/protocol
+  for this shared iGaging sensor board). The controller is an **unmarked COB epoxy blob** on
+  the LCD side — no part number obtainable, so don't pull the board for chip ID. Sensor connects
+  via an orange FPC ribbon to a white connector on the accessible side.
+- [ ] Continuity-verified pin assignment for CLK (SSY) and DATA. **Bench note:** **pins 4 AND
+  5 are both GND** (direct continuity confirmed between them and to battery negative). By
+  elimination, the three signal lines (CLK, DATA, + one more) are **pins 1, 2, 3** — confirmed.
+  With the device ON, pins 1/2/3 all **float** (~−0.02 V, drifting) — no internal pull-ups;
+  lines float until a host pulls them up and clocks (matches §6). Which of 1/2/3 is CLK vs DATA
+  still TBD (resolve via scope + clock injection). Standard Micro-USB pin roles do NOT apply.
+- [x] Whether pin 4 (ID) is connected at all → **YES, it is the GND pin** (sole continuity to
+  battery negative) on this unit. This is the ground reference, NOT pin 5. Differs from both
+  the Absolute-scale pinout in §4 and standard Micro-USB numbering.
+- [x] Battery+ (device off) has **no continuity to any connector pin** → the connector does
+  **not** pass the battery rail straight through; VDD (if exposed at all) is switched/buffered
+  or simply not present on the connector. Device is self-powered by its CR2032.
+- [ ] Actual logic-high voltage on DATA under clock (scope). *(Can't be measured passively —
+  lines float; will read it off DATA's swing once a clock is injected.)*
 - [ ] Confirmed clock rate the mic responds to (start ~9 kHz; check tolerance).
+- **Bench note — passive scope result (this unit):** with a Rigol DHO814 (1X probes, DC,
+  500 mV/div, 1 ms/div) doing armed single-shot edge captures on pins 1/2/3/5, **NOTHING
+  triggered** across rising & exhaustive provocation: pressing Data, moving the spindle,
+  toggling inch/mm and ABS/INC. The lines stay floating. → **Strongly indicates the device is
+  HOST-CLOCKED (clock-slave): it emits nothing until an external clock is driven in**, matching
+  §3. A free-running design would have shown periodic bursts here. Next: inject a clock to make
+  it talk (and thereby identify CLK vs DATA, logic level, and framing).
 - [ ] Per-unit ticks/mm constant from gauge-block calibration.
 - [ ] Bit framing confirmed: 21 bits, LSB-first, one's-complement, sign handling.
+
+---
+
+## 11. Bench log & findings — THIS unit
+
+> Live reverse-engineering record for this specific 35-065-U01. **Where this section conflicts
+> with the assumptions in §4–§5, this section wins** — those were carried over from an iGaging
+> *Absolute scale* and do not match this micrometer. Log started 2026-06-21.
+
+### 11.1 Equipment
+- Micro-USB-B **female breakout** — exposes all 5 connector pins externally with the **case
+  closed** (no need to keep opening the mic).
+- Multimeter — continuity + DC volts.
+- **Rigol DHO814** oscilloscope with **1X** passive probes.
+- **AFG (arbitrary function generator)** — *ordered 2026-06-21, ETA ~early July 2026.* Required
+  for the clock-injection step (§11.5); active bring-up is paused until it arrives.
+
+### 11.2 Corrected pinout (this unit)
+Standard Micro-USB pin roles do **not** apply — this is a proprietary mapping, and it differs
+from the §4 table.
+
+| Connector pin | THIS unit | §4 had assumed | Status |
+|---|---|---|---|
+| 1 | Signal — CLK / DATA / 3rd (TBD) | VDD | floats at idle |
+| 2 | Signal — CLK / DATA / 3rd (TBD) | CLK / SSY | floats at idle |
+| 3 | Signal — CLK / DATA / 3rd (TBD) | DATA | floats at idle |
+| 4 | **GND** | REQ | confirmed |
+| 5 | **GND** (tied to pin 4) | GND | confirmed |
+
+### 11.3 Confirmed findings
+- **Pins 4 and 5 are both GND** — direct continuity between them and to battery negative.
+- **The three signal lines are pins 1, 2, 3** (by elimination). With the device ON they all
+  **float** at ~−0.02 V — no internal pull-ups (external pull-ups will be needed, per §6).
+- **No VDD/battery rail is exposed on the connector.** Battery+ rings to no connector pin; the
+  mic is **self-powered by its CR2032 (3 V)**. The logic rail is internal only.
+- **The device is HOST-CLOCKED** (a clock-slave): it transmits nothing until an external clock
+  is driven in. Evidence in §11.4.
+- **Controller is an unmarked COB epoxy blob** on the LCD side of the PCB — no part number is
+  obtainable, so there's no value in removing the board. The accessible (battery/USB) side has
+  only passives (R1/R2, C4/C5), two transistors (Q1/Q2), the USB jack, battery contacts, the
+  sensor FPC connector, and a **config solder-jumper matrix `J10/J11…J60/J61`** (this is a
+  shared iGaging sensor board; the jumpers select the product/protocol variant).
+  Photos: `PICT0049/0056/0057.jpg`.
+
+### 11.4 What's been tried (and what it ruled out)
+1. **Meter pin 1 ↔ pin 5, battery in:** 0 V → pin 1 is **not** VDD (kills the §4 assumption).
+2. **DC sweep, device ON, GND → pins 1/2/3:** all float ~−0.02 V → no exposed rail, no pull-ups.
+3. **Continuity:** pin 4 = GND, pin 5 = GND (tied to pin 4), battery+ → no connector pin.
+4. **Passive scope** (DHO814, 1X, DC, 500 mV/div, 1 ms/div), **armed single-shot edge captures
+   on pins 1/2/3/5:** **nothing triggered** on rising edge while pressing Data, moving the
+   spindle, toggling inch/mm, and toggling ABS/INC. A second pass with a **falling-edge,
+   0.2 V** trigger likewise **caught nothing** — the passive door is now closed.
+   - **Interpretation:** a free-running design would have emitted periodic bursts here; silence
+     across every provocation (both edge polarities, down to 0.2 V) means it's **host-clocked**.
+     Passive observation is exhausted; next move is active clock injection (§11.5).
+
+### 11.5 Next step — clock injection (when the AFG arrives)
+**Goal:** make the mic talk, and in doing so identify **which of pins 1/2/3 is CLK vs DATA**
+(and the 3rd line), read the **logic-high voltage** off DATA's swing, and confirm the **21-bit
+framing**.
+
+**Rig:**
+- Breakout in the mic (battery in, case closed). **AFG ground and scope ground both to pin 4
+  (or 5).**
+- **AFG output → ~1 kΩ series resistor → the candidate CLK pin.** (The resistor is the safety
+  element — see §11.6.)
+- Scope (DC coupled) on the **other two** of pins 1/2/3. Start ~1 ms/div to see a whole frame,
+  then zoom to ~20–50 µs/div to resolve individual bits.
+- **AFG settings:** square wave, **~9 kHz**, **0 → 1.5 V** (1.5 Vpp, +0.75 V offset), ~50 %
+  duty. A continuous clock is fine to start.
+
+**Procedure:**
+1. Drive **pin 1** as CLK at 1.5 V; watch pins 2 & 3 for a ~21-bit burst synchronized to the
+   clock. No response → move the drive to **pin 2** (watch 1 & 3), then **pin 3** (watch 1 & 2).
+2. If none of the three respond at 1.5 V, step the amplitude up — **1.8 → 2.2 → 2.7 → 3.0 V
+   (battery ceiling, never exceed)** — repeating the 3-pin sweep at each level. **Stop the
+   instant DATA responds.**
+3. On response: the **driven pin = CLK**, the **responding pin = DATA**, the **third = REQ/NC**.
+   Record **DATA's high level = the logic rail**, and note which clock edge the data is valid on.
+4. Then sweep the clock rate to find the working range/tolerance, and capture a full frame to
+   confirm **21 bits, LSB-first, one's-complement** (§7).
+
+### 11.6 Why this is safe without knowing the pinout or the voltage
+Safety does **not** depend on knowing either in advance — two techniques make a wrong guess
+harmless:
+
+- **Unknown pinout → the ~1 kΩ series resistor.** If you accidentally drive an *output* (DATA),
+  the resistor bounds the contention current: worst case 3 V ÷ 1 kΩ = **3 mA**, which CMOS pins
+  shrug off. A wrong guess is simply a no-op (no response) — that's exactly how you find CLK.
+- **Unknown voltage → start at the 1.5 V floor and ramp.** The rail must be **1.5–3 V** (family
+  range, single 3 V cell). At ≤ 1.5 V you **cannot** overvoltage any pin (you drive at most
+  *equal* to Vdd). A 1.5 V-rail part *answers* a 1.5 V clock, so a response there means you're
+  done at a provably-safe level. If it stays silent at 1.5 V on all three pins, it **isn't** a
+  1.5 V part — so ramping toward the **3 V battery ceiling** can't overvoltage it.
+- **Belt-and-suspenders:** even in the paranoid case (rail really 1.5 V, driven at 3 V), the
+  pin's protection diode clamps to ~2 V and the resistor holds the clamp current **< 1 mA** —
+  safe. Use **2.2 kΩ** for extra margin (edges stay clean at 9 kHz).
+- **The device reveals the rail itself:** DATA's response amplitude *is* the logic voltage, so
+  the last unknown resolves the moment it talks.
+- **Caveat if a microcontroller is ever used as the clock instead of the AFG:** its GPIO (3.3 V
+  ESP / 5 V Arduino) is too high to drive raw — put a resistor divider on it to reach the ~1.5 V
+  start point. The AFG is preferred precisely because you dial the amplitude directly.
