@@ -303,6 +303,40 @@ Keep both interface lines **input-only / high-Z toward the caliper** to avoid tr
    (÷100 for mm, ÷2000 for inch). bits 21–22 are unused.
 5. Emit reading. (Reference implementation: `caliper_decode.py::decode_frame`.)
 
+### Wiring (MCU front-end) — everything needed to start
+
+No level shifter, no inverter, no external components. Reference all to **Pin 5**.
+
+| Caliper pin | Signal | MCU connection |
+|---|---|---|
+| Pin 2 (D−) | CLOCK (idle high, pulses low) | interrupt-capable GPIO input |
+| Pin 3 (D+) | DATA | GPIO input |
+| Pin 5 (GND) | signal ground (battery −) | MCU GND (common) |
+| Pin 1 (VBUS) | V+ ≈ 3.0 V (body, battery +) | **leave unconnected** |
+| Pin 4 (ID) | V+ (tied to body) | **leave unconnected** |
+
+- Inputs must be **high-Z / input-only** (no pull-downs into the caliper — the clock/data lines are shared
+  with front-panel buttons; pulling them can trigger button functions).
+- Do **not** power the caliper from the MCU; it runs from its own CR2032. Leave Pin 1/Pin 4 floating.
+- A series resistor (~1–10 kΩ) per line is harmless insurance against accidental drive, optional.
+
+### Timing budget & gotchas
+
+| Quantity | Value | Implication for firmware |
+|---|---|---|
+| Logic levels | 0 V / ~3 V, idle high | reads directly on 3.3 V GPIO (Vih ~2 V) |
+| Bit period | ~274 µs | trivially slow; ISR jitter is a non-issue |
+| Clock low / high | ~137 µs / ~137 µs | wide sampling window |
+| Data setup | settles ~40 µs **before** the rising edge | sample **at the rising edge** (or a few µs before) |
+| Bits per frame | exactly **24** | count rising edges; gate on the gap, not a fixed count, for robustness |
+| Frame interval | **107.2 ms** (~9.33 Hz), continuous | expect a reading ~every 107 ms even when idle |
+| Intra-frame anomalies | wider first low pulse; one ~547 µs gap after bit 3 | both ≪ inter-frame gap → won't false-trigger end-of-frame |
+| End-of-frame detector | clock high ≥ ~2 ms | safe threshold (real gap ~100 ms; max intra-frame gap ~0.55 ms) |
+
+**Bit order sanity check** (LSB-first): 10.00 mm → magnitude 1000 = `0b11111101000`; transmitted bit 0
+first. The reference decoder encodes exactly this. Re-verify on hardware against the LCD using the points
+in §8 before trusting the build (watch for the `pre-`/`pre+` display-only caveat noted in §0.5).
+
 ---
 
 ## 8. Decode + ground-truth verification
