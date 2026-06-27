@@ -75,23 +75,58 @@ variant (N8, N16R8, …).
 
 ## Build & flash
 
-Uses [PlatformIO](https://platformio.org/). The DevKitC-1 has **two** USB jacks:
+Uses [PlatformIO](https://platformio.org/) Core (verified with **6.1.19**). The
+DevKitC-1 has **two** USB jacks — know which is which before you start:
 
-- **"UART"** jack (CP210x/CH340) — flashing + serial debug.
-- **"USB"** jack (native OTG) — where the HID keyboard appears.
+- **"UART"** jack (CP210x/CH340) — used for **flashing + serial debug**.
+- **"USB"** jack (native OTG, GPIO19/20) — where the **HID keyboard** enumerates.
+
+### 0. Prerequisites
+
+- PlatformIO Core on a **supported Python (3.11–3.13)** — **not** 3.14, which
+  breaks PlatformIO's package metadata. On Arch, run it from a pinned venv.
+- Serial access: be in the **`uucp`** group (Arch's serial group; Debian/Ubuntu
+  use `dialout`). No udev rules or drivers needed — CP210x/CH340 and the S3's
+  native USB are all mainline-kernel.
+- First build auto-downloads the Espressif platform + Arduino framework into
+  `~/.platformio` (needs network once).
+
+### 1. Build
 
 ```bash
 cd firmware
-pio run                       # build
-pio run -t upload             # flash via the UART jack
-pio device monitor            # 115200 baud, watch self-test + [type] logs
+pio run
 ```
 
-Then plug the **native-USB ("USB")** jack into the computer that should receive
-the keystrokes. The UART jack can stay connected for debug, or just power.
+Expected tail on success (sizes will be in this ballpark):
 
-On boot the firmware prints a **self-test** that decodes the 5 LCD-verified
-ground-truth vectors — confirm `ALL PASS` before trusting a build:
+```
+RAM:   [=         ]  12.2% (used 40132 bytes from 327680 bytes)
+Flash: [=         ]  11.4% (used 382648 bytes from 3342336 bytes)
+========================= [SUCCESS] Took 10.81 seconds =========================
+```
+
+### 2. Flash (over the UART jack)
+
+Connect the **"UART"** jack to your build machine, then:
+
+```bash
+pio run -t upload                       # auto-detects the CP210x/CH340 port
+# pio run -t upload --upload-port /dev/ttyUSB0   # if auto-detect picks wrong
+```
+
+If auto-reset doesn't enter the bootloader (upload stalls at "Connecting….."),
+hold **BOOT**, tap **RESET**, release **BOOT**, and re-run — or use
+`pio device list` to confirm the port first.
+
+### 3. Verify the self-test (over the UART jack)
+
+```bash
+pio device monitor                      # 115200 baud
+```
+
+On boot the firmware decodes the 5 LCD-verified ground-truth vectors — confirm
+`ALL PASS` before trusting the build (this runs with no caliper attached):
 
 ```
 [selftest] decoding ground-truth vectors:
@@ -99,14 +134,26 @@ ground-truth vectors — confirm `ALL PASS` before trusting a build:
   OK   000101111100000000000000 -> 10.00    (expect 10.00)
   ...
 [selftest] ALL PASS
+[setup] ready -- press the button to type the current reading
 ```
 
-### USB-mode flag (important)
+Pressing the button also logs each keystroke here, e.g.
+`[type] 12.34  (frame=0x..., term=1)` — handy for debugging without watching the
+host field.
 
-`platformio.ini` sets `-DARDUINO_USB_MODE=0` to select the **TinyUSB OTG** stack,
-which `USBHIDKeyboard` requires. If the board enumerates as a serial port instead
-of a keyboard, that flag (vs. the default `=1` hardware CDC/JTAG) is the first
-thing to check.
+### 4. Use it as a keyboard
+
+Plug the **native-USB ("USB")** jack into the computer that should receive the
+keystrokes (it powers the board too). The UART jack can stay connected for debug
+or be unplugged. Click into a field and press the button.
+
+### USB-mode flag (why the `build_unflags` line exists)
+
+`USBHIDKeyboard` needs the **TinyUSB OTG** stack (`ARDUINO_USB_MODE=0`), but the
+`esp32-s3-devkitc-1` manifest forces `=1` (hardware CDC/JTAG). `platformio.ini`
+strips that with `build_unflags` and sets `=0`, so it's the single definition
+(`pio run -v` shows only `-DARDUINO_USB_MODE=0`). **If the board ever enumerates
+as a serial port instead of a keyboard, this flag is the first thing to check.**
 
 ## Bench-test against the LCD
 
