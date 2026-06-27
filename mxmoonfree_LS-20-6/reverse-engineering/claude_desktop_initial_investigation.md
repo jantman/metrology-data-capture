@@ -363,7 +363,10 @@ in §8 before trusting the build (watch for the `pre-`/`pre+` display-only cavea
 - [x] ~~Build per-line NPN inverter (or comparator).~~ **Not needed — logic is full ~3 V; wire direct.**
 - [x] Implement decode (LSB-first, sign, inch/mm, scale factor). *(`caliper_decode.py`, self-test passes.)*
 - [x] Ground-truth against LCD across the points in Section 8. *(5 readings, all decode correctly.)*
-- [ ] Bring clock/data into ESP32 (or Pico); print raw 24-bit packets. **← next**
+- [x] Bring clock/data into ESP32; decode frames. *(Firmware in `../firmware/` —
+      ESP32-S3 native-USB HID keyboard; button types the reading, DIP switch picks
+      Enter/Tab/none. Decode self-test passes the 5 ground-truth vectors.)*
+- [ ] Flash an ESP32-S3 and bench-verify against the LCD (boards on order). **← next**
 - [ ] (Optional) ESP32 Wi-Fi/MQTT → home-lab / Home Assistant logging.
 
 ---

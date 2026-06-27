@@ -41,6 +41,12 @@ Micro-USB contact order (1=VBUS, 2=D−, 3=D+, 4=ID, 5=GND). **Ignore breakout s
 
 ### Repo files
 
+MCU front-end (`firmware/`) — **ESP32-S3 → USB HID keyboard**: tap the caliper's
+clock/data/GND, press a button, and the current reading is *typed* into the
+focused field on the host (no host software). 2-circuit DIP switch selects the
+Enter/Tab/none terminator. See [`firmware/README.md`](firmware/README.md) for
+wiring, BOM, and build/flash steps; decode logic mirrors `caliper_decode.py`.
+
 Decoder + capture tooling (top level):
 
 - **`caliper_decode.py`** — reference decoder (`decode_frame(bits)` / `decode_bitstring(s)`); self-test passes. Port this logic to the MCU.
@@ -54,6 +60,10 @@ Reverse-engineering archive (`reverse-engineering/`) — investigation write-up,
 - **`cap_*.bin` + `gt_*mm/in_*.bin`** — raw ground-truth scope captures (160 ms, 160 ns/sample); **`gt_log.csv`**; **`*.png`** plots/screenshots.
 
 ### Picking this up later (MCU front-end)
+
+**A working firmware implementation now lives in [`firmware/`](firmware/)** —
+ESP32-S3 native-USB HID keyboard, button-triggered, DIP-selectable
+Enter/Tab/none terminator. The sketch below is the algorithm it implements.
 
 Target: an **ESP32 or RP2040** reading Pin 2/3 directly, decoding frames, and streaming readings (USB-serial, or Wi-Fi/MQTT for Home Assistant). Firmware sketch:
 
