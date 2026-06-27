@@ -2,7 +2,9 @@
 
 Usage:  python3 reveal.py A B C D E F
 """
-import sys
+import os, sys
+# caliper_decode.py lives one level up (kept at the project top level)
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from decode_robust import decode
 from caliper_decode import decode_frame
 

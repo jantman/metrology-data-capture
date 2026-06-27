@@ -41,10 +41,16 @@ Micro-USB contact order (1=VBUS, 2=D−, 3=D+, 4=ID, 5=GND). **Ignore breakout s
 
 ### Repo files
 
-- **`claude_desktop_initial_investigation.md`** — full write-up; **§0.5** = authoritative results, **§7** = MCU front-end implementation notes.
+Decoder + capture tooling (top level):
+
 - **`caliper_decode.py`** — reference decoder (`decode_frame(bits)` / `decode_bitstring(s)`); self-test passes. Port this logic to the MCU.
 - **`scope_lib.py`** — minimal SCPI client for the Rigol DHO814 (LAN, port 5555).
-- **`capture_raw.py` / `gt_capture.py` / `capture_blind.py`** — scope capture scripts; **`decode_robust.py`** (waveform→bits) / **`decode_caliper.py`** / **`reveal.py`** — decode/analysis; **`plot_capture.py`** — plots.
+- **`capture_raw.py` / `gt_capture.py` / `capture_blind.py`** — scope capture scripts.
+
+Reverse-engineering archive (`reverse-engineering/`) — investigation write-up, analysis scripts, and raw captures:
+
+- **`claude_desktop_initial_investigation.md`** — full write-up; **§0.5** = authoritative results, **§7** = MCU front-end implementation notes.
+- **`decode_robust.py`** (waveform→bits) / **`decode_caliper.py`** / **`reveal.py`** — decode/analysis; **`plot_capture.py`** — plots.
 - **`cap_*.bin` + `gt_*mm/in_*.bin`** — raw ground-truth scope captures (160 ms, 160 ns/sample); **`gt_log.csv`**; **`*.png`** plots/screenshots.
 
 ### Picking this up later (MCU front-end)
