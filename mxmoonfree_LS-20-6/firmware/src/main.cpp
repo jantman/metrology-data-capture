@@ -20,7 +20,7 @@
  * not match the display when a preset is active. (Confirmed in RE blind test F.)
  *
  * ---- Wiring (everything referenced to caliper Pin 5 = battery NEGATIVE) ----
- *   Caliper Pin 2 (CLOCK, idle high) -> GPIO4  (interrupt input)
+ *   Caliper Pin 2 (CLOCK, idle high) -> GPIO16 (interrupt input)
  *   Caliper Pin 3 (DATA)             -> GPIO5  (input)
  *   Caliper Pin 5 (GND)              -> ESP32 GND
  *   Caliper Pin 1 (VBUS, ~3 V body)  -> LEAVE UNCONNECTED  (body is battery +!)
@@ -33,15 +33,17 @@
  * ~3 V rail and reads directly on the 3.3 V GPIOs. A 1-10 kOhm series resistor in
  * each of the clock/data lines is harmless insurance (optional).
  *
- * GPIO choices avoid the S3 strapping pins (0,3,45,46), the native-USB pins
- * (19,20), and the SPI-flash/PSRAM pins (26-37) -- safe on every S3 module variant.
+ * All four signal pins (16,5,6,7,15) sit on the same header side for easy
+ * breakout wiring. GPIO choices avoid the S3 strapping pins (0,3,45,46), the
+ * native-USB pins (19,20), and the SPI-flash/PSRAM pins (26-37) -- safe on every
+ * S3 module variant.
  */
 #include <Arduino.h>
 #include "USB.h"
 #include "USBHIDKeyboard.h"
 
 // ----------------------------- Pin map -----------------------------
-static const int PIN_CLOCK  = 4;    // caliper Pin 2
+static const int PIN_CLOCK  = 16;   // caliper Pin 2
 static const int PIN_DATA   = 5;    // caliper Pin 3
 static const int PIN_BUTTON = 6;    // momentary, to GND
 static const int PIN_DIP0   = 7;    // terminator-select bit 0, to GND

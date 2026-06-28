@@ -38,7 +38,7 @@ verify with a meter.
 
 | Caliper pin | Signal | ESP32-S3 |
 |---|---|---|
-| Pin 2 (D−) | **CLOCK** (idle high, pulses low) | **GPIO4** (interrupt input) |
+| Pin 2 (D−) | **CLOCK** (idle high, pulses low) | **GPIO16** (interrupt input) |
 | Pin 3 (D+) | **DATA** | **GPIO5** (input) |
 | Pin 5 (GND) | signal ground (battery −) | **GND** |
 | Pin 1 (VBUS) | V+ ≈ 3 V (body = battery **+**) | **leave unconnected** |
@@ -60,9 +60,12 @@ high-Z (`INPUT`, no internal pull) so the firmware never back-drives the lines,
 which are shared with the caliper's front-panel buttons. The optional series
 resistors are extra insurance only.
 
-GPIO choices avoid the S3 strapping pins (0, 3, 45, 46), the native-USB pins
-(19/20), and the SPI-flash/PSRAM pins (26–37), so they're safe on every S3 module
-variant (N8, N16R8, …).
+All four signal pins (16, 5, 6, 7, 15) are on the same header side for easy
+breakout wiring. GPIO choices avoid the S3 strapping pins (0, 3, 45, 46), the
+native-USB pins (19/20), and the SPI-flash/PSRAM pins (26–37), so they're safe on
+every S3 module variant (N8, N16R8, …). The clock pin must be interrupt-capable
+— every S3 GPIO is, so any free pin works; GPIO16 was picked for being adjacent
+to GPIO15 with no secondary boot/strapping function.
 
 ### Terminator DIP truth table
 
