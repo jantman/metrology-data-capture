@@ -55,6 +55,17 @@ static const uint32_t FRAME_GAP_US = 2000;  // > max intra-frame gap (~0.55 ms),
 static const uint8_t  FRAME_BITS   = 24;
 static const uint32_t DEBOUNCE_MS  = 25;
 
+// Frames arrive continuously at ~9 Hz (every ~107 ms). If the newest latched frame
+// is older than this, the caliper is unplugged/off (or never connected) -> don't
+// type. Also rejects the sticky-garbage failure mode where a one-off noise burst on
+// the floating clock pin latched a frame that then "typed forever".
+static const uint32_t SIGNAL_TIMEOUT_MS = 300;   // ~3 frame periods of tolerance
+
+// Plausibility bound on the 20-bit magnitude. The LS-20-6 tops out at 500.00 mm =
+// 50000 counts (inch mode is smaller); a floating DATA pin reads all-high -> magnitude
+// 0xFFFFF (1048575), which this rejects. Bits 21/22 are unused and must be 0.
+static const uint32_t MAX_MAGNITUDE = 60000;     // 50000 + headroom
+
 USBHIDKeyboard Keyboard;
 
 // --------------------- ISR <-> loop shared state -------------------
@@ -64,6 +75,15 @@ static volatile uint8_t  isrBits     = 0;   // count of bits accumulated
 static volatile uint32_t isrLastEdge = 0;   // micros() of the previous rising edge
 static volatile uint32_t latchedFrame = 0;  // last COMPLETE 24-bit frame
 static volatile bool     frameValid   = false;
+static volatile uint32_t latchedAtMs  = 0;  // millis() when latchedFrame was captured
+
+// A real reading: unused bits 21/22 clear and magnitude within the caliper's range.
+// Filters out the all-high garbage a floating clock/data pin produces when no caliper
+// is attached. Pure bit math, safe to inline into the IRAM ISR.
+static inline bool frameIsPlausible(uint32_t frame) {
+  if (frame & (0x3u << 21)) return false;          // bits 21,22 must be 0
+  return (frame & 0xFFFFFu) <= MAX_MAGNITUDE;      // magnitude in range
+}
 
 // Rising-edge ISR: a long gap since the previous edge marks a frame boundary, at
 // which point the bits gathered so far were a complete frame; then this edge is
@@ -75,9 +95,10 @@ void IRAM_ATTR clockIsr() {
 
   portENTER_CRITICAL_ISR(&mux);
   if (gap > FRAME_GAP_US) {
-    if (isrBits >= FRAME_BITS) {       // previous frame finished -> latch it
+    if (isrBits >= FRAME_BITS && frameIsPlausible(isrAccum)) {  // finished + real -> latch
       latchedFrame = isrAccum;
       frameValid   = true;
+      latchedAtMs  = millis();
     }
     isrAccum = 0;
     isrBits  = 0;
@@ -125,13 +146,20 @@ static int terminatorCode() {
 static void typeReading() {
   uint32_t frame;
   bool valid;
+  uint32_t ageMs;
   portENTER_CRITICAL(&mux);
   frame = latchedFrame;
   valid = frameValid;
+  ageMs = millis() - latchedAtMs;
   portEXIT_CRITICAL(&mux);
 
   if (!valid) {
-    Serial.println("[type] no complete frame yet -- is the caliper connected/on?");
+    Serial.println("[type] no caliper frame yet -- is the caliper connected/on?");
+    return;
+  }
+  if (ageMs > SIGNAL_TIMEOUT_MS) {                 // stream stopped -> signal lost
+    Serial.printf("[type] caliper signal stale (%lu ms old) -- not typing\n",
+                  (unsigned long)ageMs);
     return;
   }
   String s = formatReading(frame);
