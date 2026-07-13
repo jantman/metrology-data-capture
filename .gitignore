@@ -5,3 +5,6 @@ __pycache__/
 # Blind-validation raw scope captures — result is documented in text (§0.5 / README),
 # kept out of git to avoid another ~12 MB of binaries.
 mxmoonfree_LS-20-6/reverse-engineering/gt_[A-F]_ch[12].bin
+
+# iGaging 35-065-U01 clock-injection raw captures (result documented in text)
+igaging_35-065-U01/captures/
