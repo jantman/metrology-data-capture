@@ -8,6 +8,13 @@ It has a Mini USB port data output interface mentioned in the description and sh
 
 The "data output" port is a **proprietary ~3 V synchronous serial interface** on a Micro-USB jack (it is **not** USB). Clock + data + V+ + GND. The pinout, signal timing, and the 24-bit frame format are fully decoded and **verified against the LCD at five known readings plus an independent 6-position blind test (all correct).** The remaining work is purely the readout hardware/firmware — see *"Picking this up later"* below.
 
+### The finished build
+
+The ESP32-S3 readout in its enclosure, tapped into the caliper's data port and typing readings over USB HID. (Click either image for the full-resolution photo.)
+
+[![Overall view of the caliper wired to the ESP32-S3 enclosure](images/build-overview-thumb.jpg)](images/build-overview.jpg)
+[![Close-up of the enclosure showing the OLED terminator display, button, and knob](images/build-closeup-thumb.jpg)](images/build-closeup.jpg)
+
 ### Pinout & wiring
 
 Micro-USB contact order (1=VBUS, 2=D−, 3=D+, 4=ID, 5=GND). **Ignore breakout silkscreen.** All voltages referenced to **Pin 5**.
