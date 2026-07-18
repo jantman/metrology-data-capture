@@ -3,7 +3,7 @@ iGaging 35-065-U01 micrometer data port.
 
 Both instruments are Rigol LXI devices that expose a raw SCPI socket:
   - Scope: DHO814 oscilloscope  @ rigol-oscope.jasonantman.com:5555  (confirmed)
-  - Awg:   DG902 Pro AWG        @ rigol-awg.jasonantman.com:5555      (port TO VERIFY)
+  - Awg:   DG902 Pro AWG        @ rigol-awg.jasonantman.com:5025      (confirmed 2026-07-17)
 
 The base `SCPI` class is lifted from mxmoonfree_LS-20-6/scope_lib.py (proven against the
 DHO814) and generalized so the same block/newline framing serves the AWG too.
@@ -15,7 +15,8 @@ import time
 
 SCOPE_HOST = "rigol-oscope.jasonantman.com"
 AWG_HOST = "rigol-awg.jasonantman.com"
-PORT = 5555  # DHO814 confirmed; DG902 Pro assumed same — verify with a bare *IDN? first.
+PORT = 5555  # DHO814 raw-SCPI port (confirmed).
+AWG_PORT = 5025  # DG902 Pro raw-SCPI port (confirmed 2026-07-17; it does NOT use 5555).
 
 
 class SCPI:
@@ -101,7 +102,7 @@ class Scope(SCPI):
     def arm_single(self, trig_ch, level, slope="POSitive", mdepth=1_000_000, tb_scale=0.01):
         self.write(":RUN")
         self.write(f":ACQuire:MDEPth {mdepth}")
-        self.write(":TIMebase:MAIN:MODE MAIN")
+        self.write(":TIMebase:MODE MAIN")  # DHO814: mode is :TIMebase:MODE, not :TIMebase:MAIN:MODE
         self.write(f":TIMebase:MAIN:SCALe {tb_scale}")
         self.write(":TIMebase:MAIN:OFFSet 0")
         self.write(":TRIGger:MODE EDGE")
@@ -155,7 +156,7 @@ class Awg(SCPI):
     makes the displayed/commanded amplitude equal the amplitude at the pin.
     """
 
-    def __init__(self, host=AWG_HOST, port=PORT, timeout=10):
+    def __init__(self, host=AWG_HOST, port=AWG_PORT, timeout=10):
         super().__init__(host, port, timeout)
 
     def output(self, on, ch=1):
@@ -163,7 +164,19 @@ class Awg(SCPI):
 
     def set_highz(self, ch=1):
         # High-Z so commanded amplitude == amplitude at the pin (see class docstring).
-        self.write(f":OUTPut{ch}:IMPedance INFinity")
+        # DG902 Pro: the correct keyword is :OUTPut:LOAD INFinity. The :IMPedance form is
+        # rejected (-113 undefined header) — confirmed 2026-07-17. (Amplitudes were still
+        # correct before this fix only because the AWG's power-on default load is High-Z.)
+        self.write(f":OUTPut{ch}:LOAD INFinity")
+
+    def dc(self, volts, ch=2):
+        """Configure (but do NOT enable) channel `ch` as a High-Z DC source at `volts`.
+
+        Used to supply VDD into connector pin 1. Verify the actual level on the scope before
+        trusting it (start low): commanded == delivered only in High-Z mode.
+        """
+        self.set_highz(ch)
+        self.write(f":SOURce{ch}:APPLy:DC 1,1,{volts}")
 
     def square(self, freq, low=0.0, high=1.5, duty=50, ch=1):
         """Configure (but do NOT enable) a 0->high square-wave clock.

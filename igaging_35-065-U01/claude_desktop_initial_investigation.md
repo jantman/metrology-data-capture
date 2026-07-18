@@ -394,3 +394,60 @@ harmless:
 - **Caveat if a microcontroller is ever used as the clock instead of the AFG:** its GPIO (3.3 V
   ESP / 5 V Arduino) is too high to drive raw — put a resistor divider on it to reach the ~1.5 V
   start point. The AFG is preferred precisely because you dial the amplitude directly.
+
+### 11.7 Bench session 2026-07-18 — clock injection (DG902 Pro + DHO814)
+
+First live clock-injection session (per `BRINGUP_PLAN.md`). **Outcome: CLK/DATA not yet
+confirmed — every stimulus so far yields only crosstalk. Leading unblock is powering pin 1
+(VDD). See `PROTOCOL_RESEARCH.md` for the sourced protocol facts that reframed the work.**
+
+**Instrument setup / gotchas fixed (in `scpi_lib.py`):**
+- **DG902 Pro raw-SCPI port = 5025**, NOT 5555 (the scope's port). Baked into `AWG_PORT`.
+- **DHO814 timebase mode** command is `:TIMebase:MODE MAIN` — `:TIMebase:MAIN:MODE` was
+  rejected (`-100`) and threw "Remote Cmd Error" pop-ups (captures were still valid).
+- **AWG High-Z** keyword is `:OUTPut:LOAD INFinity`; `:OUTPut:IMPedance` is rejected
+  (`-113`). `set_highz()` had been silently failing, but amplitudes were correct anyway
+  because the AWG's power-on default load is already High-Z (scope-verified 1:1).
+- AWG burst: `:SOURce1:BURSt:*` + `:TRIGger1:SOURce IMMediate` (auto-repeat at INTernal:PERiod).
+
+**What was tried and ruled out:**
+1. **Continuous 9 kHz, each pin driven in turn (1.5→3.0 V ramp), watch the other two.** All
+   three pins: **only crosstalk.** The non-driven pins swing a *fixed fraction* of the clock
+   amplitude (pin-adjacency matrix ≈ 1↔2:0.20, 2↔3:0.20, 1↔3:0.10 — consistent with the pins
+   in physical order 1-2-3). Fixed-fraction-of-clock ⇒ **the mic drives nothing**; the lines
+   are floating and passively coupled. Wiring/grounds/series-R all validated by this.
+2. **DATA-button "gate" hypothesis** (held button while clocking each pin): still crosstalk.
+   **Passive self-clock test** (AWG off, sensitive NORMAL trigger, press DATA): no trigger.
+   Research (below) confirms the on-body DATA button does **not** self-clock a frame — in the
+   factory cable an MCU does the clocking; the button just triggers the PC keyboard-type.
+3. **Burst framing + DATA pull-down** (21 cyc @ 9 kHz + ~7 ms gap into pin 2; measured
+   **9.887 kΩ** pull-down pin 3→GND; mic **awake**): still crosstalk. (An earlier burst run was
+   invalid — the mic had **auto-slept**; auto-off is **tens of minutes**, so sleep was not the
+   systematic cause of the other negatives.)
+
+**Online research (2026-07-18, two independent passes → `PROTOCOL_RESEARCH.md`):**
+- Device = iGaging **"IP65 EZ Data Twin-Force"** micrometer; port = iGaging **21-bit**
+  synchronous protocol, **host-clocked**, **no REQ line**. Not Mitutoyo SPC.
+- Standard mapping: **pin1 = VDD, pin2 = CLOCK (drive), pin3 = DATA (read)**; LSB-first,
+  ~9 kHz, 21 bits, raw absolute ticks ≈ 4030/mm. Sign encoding one's- vs two's-complement
+  **disputed** — resolve empirically in Phase B/C.
+- Official cable pinned down: **iGaging `100-700-USB-MC`** (Micro-USB variant; supersedes §8's
+  guess). The plain-SPC `100-700-USB` is the wrong, incompatible one.
+
+**Current leading hypothesis (why total silence on every pin):** pin 1 is a **VDD *input***,
+not the exposed rail — §11.3 measured it floating ~0 V, and an exposed 3 V rail would read 3 V.
+The encoder+LCD run off the CR2032 (display works), but the **CLK/DATA interface buffer is
+likely powered from pin-1 VDD**, which we left floating ⇒ the interface never powers up ⇒
+silence regardless of how we clock. This is the one explanation consistent with *every* pin
+being dead.
+
+**Next step (rig staged, not yet run):** supply **DC 3.0 V to pin 1** from AWG **CH2** (through
+a small series R) while burst-clocking pin 2 and reading pin 3 — `vdd_burst_capture.py`. It
+self-verifies the VDD level on the scope starting at a safe 1.0 V (aborts on voltage doubling)
+before ramping. Pin-1 voltage **sagging under load = the interface is drawing current =
+powering up** (good sign). If pin 1 holds VDD steady with still-crosstalk data, pin 1 is
+likely NC and we revisit the clk/data pairing / a different enable.
+
+**Session tooling added:** `button_capture.py` (button-gated), `passive_capture.py` (self-clock
+probe), `burst_capture.py` (burst clock), `vdd_burst_capture.py` (VDD supply + burst),
+`PROTOCOL_RESEARCH.md` (sourced protocol reference).
