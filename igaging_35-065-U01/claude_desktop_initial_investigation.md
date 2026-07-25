@@ -511,11 +511,19 @@ Resumed with the rig wired for the VDD test: AWG **CH1→1 kΩ→pin 2** (clock)
   40 s / **741-sample** monitor showed pin3 never left ±0.42 V. **The DATA button does NOT gate
   or drive the data line.** Matches the research (it's the factory cable's PC-keyboard trigger).
 
+**Two final no-rewire checks — both negative:**
+- **Slow-clock sweep** (VDD on pin1, continuous clock on pin2, 200 Hz–9 kHz): pin3 stayed
+  symmetric ±0.36 V at every frequency, pin3/clk ratio ~0.22 throughout. No slow-clock response.
+- **Pure-passive button** (AWG OFF, monitor all 3 pins 40 s while pressing DATA): every pin sat
+  at floating noise (pin1 ±0.2, pin2 ±0.15, pin3 ±0.1 V). **No self-clocked frame.** Confirms
+  the DATA button does nothing observable on the connector.
+
 **State after today (revised):** CLK/DATA still unconfirmed. Ruled out AT CORRECT VOLTAGE, on
 the assumed pin2=CLK/pin3=DATA mapping: continuous clock (all pins); VDD + continuous; VDD +
-burst (idle high AND low); VDD + continuous + DATA-button. The mic drives **nothing** on any
-pin under every stimulus we can produce — the no-rewire space is exhausted. The unverified
-assumption is **which pin is CLK vs DATA** (only physical order 1-2-3 and "all float" were ever
-confirmed). Next: cheap no-rewire checks (**slow clock 0.5–2 kHz**, **pure-passive button** with
-AWG off), then the definitive **pin-permutation sweep** (needs rewiring — each pin as clock/VDD
-in turn).
+burst (idle high AND low); VDD + continuous + DATA-button; slow clock 200 Hz–9 kHz; passive
+button (self-clock). The mic drives **nothing** on any pin under every stimulus we can produce —
+**the entire no-rewire stimulus space is exhausted.** The one unverified assumption left is
+**which pin is CLK vs DATA vs VDD** (only physical order 1-2-3 and "all float at idle" were ever
+confirmed; the role mapping came from generic iGaging research, not this unit). **Next: the
+pin-permutation sweep** — drive each pin as clock and each other as VDD in turn, watching the
+rest for a rail-clamped (driven) response. Needs rewiring between combos.
