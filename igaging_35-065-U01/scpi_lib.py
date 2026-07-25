@@ -99,7 +99,12 @@ class Scope(SCPI):
     def disable_channel(self, ch):
         self.write(f":CHANnel{ch}:DISPlay OFF")
 
-    def arm_single(self, trig_ch, level, slope="POSitive", mdepth=1_000_000, tb_scale=0.01):
+    def arm_single(self, trig_ch, level, slope="POSitive", mdepth=1_000_000, tb_scale=0.01,
+                   sweep="NORMal"):
+        # sweep=NORMal: only stops on a real trigger (use when the signal is guaranteed).
+        # sweep=AUTO:   force-triggers if none arrives, so :SINGle always yields a window
+        #               (use when the stimulus timing/alignment is uncertain — a captured
+        #               window is then guaranteed and correctness is checked in analysis).
         self.write(":RUN")
         self.write(f":ACQuire:MDEPth {mdepth}")
         self.write(":TIMebase:MODE MAIN")  # DHO814: mode is :TIMebase:MODE, not :TIMebase:MAIN:MODE
@@ -109,9 +114,32 @@ class Scope(SCPI):
         self.write(f":TRIGger:EDGE:SOURce CHANnel{trig_ch}")
         self.write(f":TRIGger:EDGE:SLOPe {slope}")
         self.write(f":TRIGger:EDGE:LEVel {level}")
-        self.write(":TRIGger:SWEep NORMal")
+        self.write(f":TRIGger:SWEep {sweep}")
         time.sleep(0.3)
         self.write(":SINGle")
+
+    def measure_vavg(self, ch, settle=0.8, tb_scale=0.001, tries=10):
+        """Read a channel's true DC average via :MEASure (AUTO sweep, no edge needed).
+
+        Use this for flat DC lines (e.g. a supplied VDD rail) — an edge trigger can never
+        fire on a level with no transitions, so arm_single()+read would hang/return stale.
+
+        The DHO814 returns ~9.9E37 when a measurement isn't ready yet (no valid acquisition
+        on screen). We RUN, let AUTO sweep fill a window, then poll until the value is real,
+        raising if it never resolves — so a caller never mistakes the sentinel for a voltage.
+        """
+        self.write(":TIMebase:MODE MAIN")
+        self.write(f":TIMebase:MAIN:SCALe {tb_scale}")
+        self.write(":TRIGger:SWEep AUTO")
+        self.write(":RUN")
+        time.sleep(settle)
+        v = float("inf")
+        for _ in range(tries):
+            v = float(self.query(f":MEASure:ITEM? VAVG,CHANnel{ch}"))
+            if abs(v) < 1e30:  # real reading (sentinel is ~9.9E37)
+                return v
+            time.sleep(0.3)
+        raise RuntimeError(f"VAVG on CH{ch} never resolved (last={v:.2e}); scope not acquiring?")
 
     def wait_stop(self, timeout=15):
         deadline = time.time() + timeout
@@ -164,10 +192,17 @@ class Awg(SCPI):
 
     def set_highz(self, ch=1):
         # High-Z so commanded amplitude == amplitude at the pin (see class docstring).
-        # DG902 Pro: the correct keyword is :OUTPut:LOAD INFinity. The :IMPedance form is
-        # rejected (-113 undefined header) — confirmed 2026-07-17. (Amplitudes were still
-        # correct before this fix only because the AWG's power-on default load is High-Z.)
-        self.write(f":OUTPut{ch}:LOAD INFinity")
+        # DG902 Pro FIRMWARE TRAP (confirmed 2026-07-25): the spelled-out keyword
+        # ":OUTPut:LOAD INFinity" is MIS-PARSED and silently sets the load to 1 ohm
+        # (readback 1.0) — the worst case: the AWG then clamps commanded amplitude to
+        # ~0.196 V and drives its full ~10 V EMF into a high-Z pin. The abbreviated form
+        # ":OUTPut:LOAD INF" is the ONLY spelling that gives true High-Z (readback 9.9E37).
+        # (":OUTPut:LOAD 10000" is the 10 kOhm max — near-High-Z but ~0.5% high, not exact;
+        # numeric "9.9E37" also mis-parses to 1 ohm. Use INF.)
+        self.write(f":OUTPut{ch}:LOAD INF")
+        rb = self.query(f":OUTPut{ch}:LOAD?")
+        if "E+3" not in rb and "E37" not in rb:  # expect ~9.9E+37 for High-Z
+            raise RuntimeError(f"CH{ch} High-Z NOT set (LOAD readback {rb!r}); refusing to drive.")
 
     def dc(self, volts, ch=2):
         """Configure (but do NOT enable) channel `ch` as a High-Z DC source at `volts`.
