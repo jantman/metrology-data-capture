@@ -451,3 +451,50 @@ likely NC and we revisit the clk/data pairing / a different enable.
 **Session tooling added:** `button_capture.py` (button-gated), `passive_capture.py` (self-clock
 probe), `burst_capture.py` (burst clock), `vdd_burst_capture.py` (VDD supply + burst),
 `PROTOCOL_RESEARCH.md` (sourced protocol reference).
+
+> **⚠ Correction (see §11.8):** the §11.7 claim that High-Z is `:OUTPut:LOAD INFinity` and
+> "was working because the default load is High-Z" is **WRONG**. On this DG902 Pro `INFinity`
+> mis-parses to a **1 Ω** load, which over-drove every pin to ~10 V. Several §11.7 negatives
+> (esp. the burst tests) were therefore run at the wrong voltage or with **no clock at all**.
+> Treat §11.7's burst results as **void**; the continuous-clock crosstalk *ratios* still hold.
+
+### 11.8 Bench session 2026-07-25 — instrument bug found; VDD hypothesis falsified (continuous)
+
+Resumed with the rig wired for the VDD test: AWG **CH1→1 kΩ→pin 2** (clock), **CH2→870 Ω→pin 1**
+(DC VDD), 10 kΩ pull-down pin 3→GND, scope CH1–4 on pins 1/2/3 + AWG CH1 out, all grounds pin 4.
+
+**The big find — AWG was over-driving every pin ~3× all along (`scpi_lib.set_highz`):**
+- `:OUTPut:LOAD INFinity` on this DG902 Pro **silently sets a 1 Ω load** (readback `1.0`), NOT
+  High-Z. Into 1 Ω the AWG clamps commanded amplitude to `~10 V ÷ 51 ≈ 0.196 V` and drives its
+  full **~10 V open-circuit EMF** into the high-Z pins. So a "3 V" clock was really **>9.5 V**
+  at the pin (clipping the scope at every vertical scale) — ~3× over the 3 V battery ceiling.
+- The **only** spelling that gives true High-Z is **`:OUTPut:LOAD INF`** (readback `9.9E37`).
+  `10000` = the 10 kΩ max (near-High-Z, ~0.5 % high); `50` and numeric `9.9E37` also mis-parse.
+- **Fixed:** `set_highz()` now sends `INF` **and reads it back, raising if not confirmed** — the
+  tooling refuses to drive unless High-Z is verified. Detection was query-only (watch whether the
+  commanded amplitude gets clamped), so the fix was found without ever driving 10 V again.
+
+**Two more tooling bugs fixed (both masked results):**
+- **VDD readback** used an edge trigger through 0 V — a flat DC rail has no edge, so it never
+  triggered and returned a stale **0.000 V** (the earlier "pin 1 SAGGING under load!" was a pure
+  artifact). Now `Scope.measure_vavg()` reads DC via `:MEASure`/AUTO sweep. Verified: pin 1
+  tracks the command 1:1 (1.0→0.99 V, 3.0→3.00 V), **no doubling**.
+- **Capture trigger**: added `sweep=AUTO` to `arm_single` + a **"clock actually present on the
+  driven pin" guard** in `vdd_burst_capture.py`, so a missing/one-shot clock can no longer
+  masquerade as a "no response."
+
+**Results with the corrected 3 V clock:**
+1. **VDD (3.0 V, steady) on pin 1 + continuous 9 kHz on pin 2 → pin 3 = 0.74 V** vs a clock of
+   3.17 V, i.e. ratio **0.23 ≈ the 0.21 crosstalk coupling factor.** **Clean negative:** powering
+   pin 1 does **not** wake the data line (for a continuous clock). VDD held 2.997 V — *no* sag,
+   which is expected for a healthy CMOS input (nA quiescent), so "no sag" neither confirms nor
+   denies pin1=VDD; the pin-3 response is the real test, and it stayed crosstalk.
+2. **Burst mode never actually fired a clock** — the guard caught pin 2 at 0.08 V, 0 transitions.
+   `:TRIGger1:SOURce IMMediate` is a one-shot, not an auto-repeat. **⇒ Burst framing — the
+   mechanism real iGaging readers use — has NEVER been delivered to the mic** (this session or
+   §11.7). It is the strongest *untested* lead.
+
+**State after today:** CLK/DATA still unconfirmed. Ruled out (now at correct voltage):
+continuous clock on all pins; VDD-on-pin1 + continuous clock. Genuinely untested: **a real
+repeating burst train** (needs the burst-trigger SCPI fixed to `:SOURce1:BURSt:TRIGger:SOURce
+INTernal` or equivalent). No rewiring needed to try it.
