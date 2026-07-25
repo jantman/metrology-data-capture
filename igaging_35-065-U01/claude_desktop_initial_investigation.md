@@ -564,3 +564,33 @@ The mic never actively drives a connector pin. Still genuinely untested: **burst
 permutations** (all 6); **clocking while the spindle MOVES** (data-on-change encoders only emit
 on movement — every test so far was on a STATIC reading); or the port requires the genuine host
 handshake (official `100-700-USB-MC` cable) we haven't reproduced.
+
+### 11.10 Recommended next steps (ranked by value ÷ effort)
+
+Injection is exhausted; these are what remains, in the order worth trying.
+
+1. **Clock/listen while the spindle MOVES — DO THIS FIRST (cheap, no rewiring).** Every test to
+   date was on a *static* reading. Some encoder ASICs only shift out (or only self-clock) when
+   the position changes. Two variants on the current wiring:
+   - *Passive + motion:* AWG off, monitor all three pins (like `passive_button_monitor`) while
+     slowly turning the spindle — catches a self-clocked "on-change" output.
+   - *Clocked + motion:* drive the clock on a pin (VDD on another) and watch the third while
+     moving the spindle — catches an output that only updates on movement.
+   If any pin swings a real (rail-clamped) level, injection is back on and we go to Phase B.
+
+2. **Burst-mode permutation sweep (all 6 combos)** — completes the matrix (`pin_sweep --mode
+   burst` per combo). Low expected value: the continuous permutations were all dead and burst on
+   the assumed mapping was dead, but it's the last stone unturned in pure injection. Needs the
+   same 6 rewires as §11.9.
+
+3. **Step back to the genuine host interface.** It is a real possibility that THIS unit's port
+   needs the official cable's handshake (an init/bias/enable) or simply isn't the generic 21-bit
+   protocol on this model. Options: obtain the iGaging **`100-700-USB-MC`** cable and sniff its
+   lines with the scope (definitive — shows exactly what the host does), or conclude that
+   passive/injection RE has hit its limit on this unit.
+
+Instrument state carried forward (all verified this session): AWG raw-SCPI **:5025**; **High-Z =
+`:OUTPut:LOAD INF`** (never `INFinity`); DHO814 timebase `:TIMebase:MODE MAIN`; use `:MEASure`
+(`Scope.measure_item`) not RAW-window digitising for bursty signals; VMAX/VMIN not VTOP/VBASe on
+coupling-only lines; **re-check probe 1×/10× switches after handling.** Tools ready to reuse:
+`pin_sweep.py`, `vdd_burst_capture.py`, `button_data_capture.py`, `scpi_lib.py`.

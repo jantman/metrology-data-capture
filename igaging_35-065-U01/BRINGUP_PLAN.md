@@ -1,14 +1,21 @@
 # Bench Bring-Up Plan — iGaging 35-065-U01 Clock Injection
 
-> **STATUS 2026-07-18 — partially superseded.** The first injection session ran (§11.7 of
-> `claude_desktop_initial_investigation.md`). Key correction: **a plain continuous clock on the
-> right pin is NOT sufficient** — every pin/stimulus so far yields only crosstalk. Online
-> research (`PROTOCOL_RESEARCH.md`) confirmed the 21-bit host-clocked protocol and mapped
-> **pin1 = VDD, pin2 = CLOCK, pin3 = DATA**. The current leading unblock is **supplying VDD to
-> pin 1** (the interface buffer is probably unpowered). Read §11.7 + `PROTOCOL_RESEARCH.md`
-> first; the port/edge/framing details in the Phases below still apply, but the DATA-button and
-> "any pin might be CLK" framings are resolved. Also note: AWG raw-SCPI port is **5025** (not
-> 5555), and High-Z is `:OUTPut:LOAD INFinity`.
+> **STATUS 2026-07-25 — clock injection EXHAUSTED, all negative. Read §11.7–§11.10 of
+> `claude_desktop_initial_investigation.md` before doing anything here.** Two full bench
+> sessions drove the mic every way we can: every pin as clock in every CLK/DATA/VDD role
+> assignment (6/6 permutations), continuous + burst (idle high & low), 0.2–9 kHz, with/without
+> VDD on each pin, with/without the DATA button (active + passive). **Result: the mic never
+> actively drives any connector pin — only passive crosstalk, everywhere.** So the Phase-A
+> "find CLK/DATA by injecting a clock" premise below did NOT pan out for this unit; Phases B/C
+> are blocked until something makes a pin actually drive.
+>
+> Instrument corrections that supersede the text below: AWG raw-SCPI port is **5025** (not
+> 5555); DHO814 timebase mode is `:TIMebase:MODE MAIN`; **High-Z is `:OUTPut:LOAD INF`** —
+> the spelled-out `INFinity` mis-parses to a 1 Ω load and over-drives the pins (see §11.8).
+>
+> **Next (see §11.10):** (1) clock/listen while the spindle MOVES — the one untested variable
+> (every test was on a static reading); (2) if still dead, reconsider whether this port needs
+> the genuine host cable (`100-700-USB-MC`) rather than more injection permutations.
 
 Execution plan for the next bench session. Goal: **make the mic talk and fully decode its
 21-bit clock/data protocol.** Passive reverse-engineering is exhausted (the device is
