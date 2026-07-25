@@ -66,6 +66,12 @@ def main():
             awg.dc(args.vdd, ch=2); time.sleep(0.4)
             vv = scope.measure_vavg(PIN_CHANS[args.vdd_pin])
             print(f"[VDD] {args.vdd:g} V commanded on pin{args.vdd_pin} -> reads {vv:.3f} V")
+            if vv < args.vdd * 0.8:
+                raise SystemExit(
+                    f"VDD only {vv:.2f} V of {args.vdd:g} V reaching pin{args.vdd_pin} — the "
+                    f"supply is NOT arriving (poor CH2 clip contact / high-R lead forms a "
+                    f"divider with the scope probe). Reseat the VDD clip and re-run; the test is "
+                    f"invalid without solid VDD. (A healthy CMOS VDD input draws ~nA and holds.)")
 
         if args.mode == "burst":
             configure_burst(awg, args.freq, args.amp, args.ncycles, args.period_ms / 1000.0)
@@ -79,9 +85,12 @@ def main():
         scope.write(":TRIGger:SWEep AUTO"); scope.write(":RUN")
         scope.write(f":TIMebase:MAIN:SCALe {win_ms / 1000.0 / 10.0}")
         time.sleep(1.2)
+        # VMAX/VMIN (raw peak/trough) not VTOP/VBASe: the "settled level" measurements return the
+        # 9.9E37 "not ready" sentinel on a pure-coupling/noise line that has no clear bimodal
+        # high/low. VMAX/VMIN always resolve and serve the symmetry (coupling vs driven) check.
         vpp = {ch: scope.measure_item(ch, "VPP") for ch in (1, 2, 3)}
-        vtop = {ch: scope.measure_item(ch, "VTOP") for ch in (1, 2, 3)}
-        vbase = {ch: scope.measure_item(ch, "VBASe") for ch in (1, 2, 3)}
+        vmax = {ch: scope.measure_item(ch, "VMAX") for ch in (1, 2, 3)}
+        vmin = {ch: scope.measure_item(ch, "VMIN") for ch in (1, 2, 3)}
         os.makedirs(OUTDIR, exist_ok=True)
         tag = f"sweep_clk{args.clk_pin}_vdd{args.vdd_pin}_{args.mode}"
         scope.screenshot(f"{OUTDIR}/{tag}_scope.png")
@@ -95,8 +104,8 @@ def main():
         print("AWG CH1+CH2 OFF.")
 
     clk_vpp = vpp[clk_ch]
-    print(f"\n  CLK pin{args.clk_pin}: VPP={clk_vpp:.2f}V (VTOP {vtop[clk_ch]:+.2f}/"
-          f"VBASe {vbase[clk_ch]:+.2f})")
+    print(f"\n  CLK pin{args.clk_pin}: VPP={clk_vpp:.2f}V (VMAX {vmax[clk_ch]:+.2f}/"
+          f"VMIN {vmin[clk_ch]:+.2f})")
     if clk_vpp < CLK_PRESENT_V:
         print(f"\n!!! CLOCK NOT PRESENT (VPP {clk_vpp:.2f} < {CLK_PRESENT_V}). Is AWG CH1 on "
               f"pin {args.clk_pin}? Result void.")
@@ -105,7 +114,7 @@ def main():
     hit = None
     for p in watch:
         role = "VDD" if p == args.vdd_pin else "DATA?"
-        pv, pt, pb = vpp[PIN_CHANS[p]], vtop[PIN_CHANS[p]], vbase[PIN_CHANS[p]]
+        pv, pt, pb = vpp[PIN_CHANS[p]], vmax[PIN_CHANS[p]], vmin[PIN_CHANS[p]]
         expect = XTALK_RATIO * clk_vpp
         centered = abs(pt + pb) < 0.3 * pv if pv > 0.1 else True
         real = role == "DATA?" and pv > expect * MARGIN and pv > 0.5 and not centered
@@ -117,7 +126,7 @@ def main():
             note = "  (large but symmetric about 0 -> coupling)"
         else:
             note = "  (coupling)"
-        print(f"  pin{p} [{role}]: VPP={pv:.2f}V VTOP={pt:+.2f} VBASe={pb:+.2f}{note}")
+        print(f"  pin{p} [{role}]: VPP={pv:.2f}V VMAX={pt:+.2f} VMIN={pb:+.2f}{note}")
         if real:
             hit = p
 

@@ -527,3 +527,40 @@ button (self-clock). The mic drives **nothing** on any pin under every stimulus 
 confirmed; the role mapping came from generic iGaging research, not this unit). **Next: the
 pin-permutation sweep** — drive each pin as clock and each other as VDD in turn, watching the
 rest for a rail-clamped (driven) response. Needs rewiring between combos.
+
+### 11.9 Pin-permutation sweep — ALL 6 combos negative (2026-07-25 cont.)
+
+Drove each pin as clock and each other as VDD in turn (`pin_sweep.py`, continuous 9 kHz, 3 V,
+VDD 3 V), watching the third for a rail-clamped (driven) vs symmetric (coupling) response:
+
+| clk | vdd | watch | watched-pin verdict |
+|-----|-----|-------|---------------------|
+|  1  |  2  |   3   | coupling |
+|  1  |  3  |   2   | coupling |
+|  2  |  1  |   3   | coupling (from §11.8 runs) |
+|  2  |  3  |   1   | coupling |
+|  3  |  1  |   2   | coupling |
+|  3  |  2  |   1   | coupling |
+
+**The mic drives NOTHING on any pin under any CLK/VDD/DATA role assignment.** CLK/DATA identity
+is moot — no pin ever actively drives; every watched pin shows only symmetric-about-0 coupling
+that scales with the clock. VDD (3 V) held rock-steady on whichever pin supplied it (healthy
+CMOS-input behaviour, ~nA draw).
+
+**Two instrument gotchas caught mid-sweep:**
+- **Scope CH2 probe 1×/10× switch bumped to 10×** while software stayed 1× → CH2 read every
+  voltage 10× LOW, faking a VDD "sag" on pin2 (multimeter confirmed pin2 = 2.998 V while the
+  scope showed 0.30 V). Fixed by restoring the probe switch to 1×. **Lesson: re-verify probe
+  attenuation after handling.** `pin_sweep` now aborts if supplied VDD doesn't read back ≥80% of
+  commanded (catches a dead VDD path / probe mis-scale). No data was missed — every watched-pin
+  verdict was symmetric coupling regardless of scale.
+- `:MEASure VTOP/VBASe` return the 9.9E37 "not ready" sentinel on a pure-coupling line (no clear
+  bimodal high/low); `pin_sweep` uses VMAX/VMIN (raw peak/trough) for the shape check.
+
+**BOTTOM LINE after 2026-07-25:** external clock injection on ANY pin, in ANY role (clk/data/
+vdd), continuous OR burst (assumed mapping), fast OR slow (0.2–9 kHz), with/without VDD,
+with/without the DATA button, actively pressed or passive — produces **ONLY passive crosstalk.**
+The mic never actively drives a connector pin. Still genuinely untested: **burst-mode
+permutations** (all 6); **clocking while the spindle MOVES** (data-on-change encoders only emit
+on movement — every test so far was on a STATIC reading); or the port requires the genuine host
+handshake (official `100-700-USB-MC` cable) we haven't reproduced.
