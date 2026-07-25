@@ -494,7 +494,28 @@ Resumed with the rig wired for the VDD test: AWG **CH1→1 kΩ→pin 2** (clock)
    mechanism real iGaging readers use — has NEVER been delivered to the mic** (this session or
    §11.7). It is the strongest *untested* lead.
 
-**State after today:** CLK/DATA still unconfirmed. Ruled out (now at correct voltage):
-continuous clock on all pins; VDD-on-pin1 + continuous clock. Genuinely untested: **a real
-repeating burst train** (needs the burst-trigger SCPI fixed to `:SOURce1:BURSt:TRIGger:SOURce
-INTernal` or equivalent). No rewiring needed to try it.
+**Burst train — finally delivered, and the DATA button — retested (later same session):**
+- **Burst SCPI resolved by scope-measuring the AWG output.** `:SOURce1:BURSt:TRIGger:SOURce` is
+  `-113` on this firmware; the auto-repeat source is the ORIGINAL `:TRIGger1:SOURce IMMediate`
+  (re-fires the N-cycle burst every `:BURSt:INTernal:PERiod`; scope-confirmed pin VPP≈3.3 V,
+  VAVG consistent with a 21-cyc/10 ms train). The burst IDLES HIGH (no working idle-level cmd —
+  all `-113`); **`:OUTPut1:POLarity INVerted`** flips it to a clean **idle-LOW** train (pin2
+  VAVG 2.6→0.41 V, verified). A second capture bug also fixed: digitising ONE `read_raw` window
+  can miss a burst (RAW memory time-span < the 10 ms period → lands in the idle gap); the
+  decision now uses live `:MEASure` (`Scope.measure_item`), which re-evaluates every sweep.
+- **VDD + burst, idle HIGH → pin3 VPP 0.77 V, symmetric ±0.36 (crosstalk).** Negative.
+- **VDD + burst, idle LOW → pin3 VPP 0.75 V, symmetric ±0.36 (crosstalk).** Negative.
+- **DATA button retested with working tooling** (`button_data_capture.py`, then a 40 s live
+  monitor): VDD on pin1, continuous 3 V clock on pin2, button mashed. A NORMal trigger armed at
+  +1.0 V on pin3 fired **once** (a mechanical/EMI press glitch — RAW readback was flat), but the
+  40 s / **741-sample** monitor showed pin3 never left ±0.42 V. **The DATA button does NOT gate
+  or drive the data line.** Matches the research (it's the factory cable's PC-keyboard trigger).
+
+**State after today (revised):** CLK/DATA still unconfirmed. Ruled out AT CORRECT VOLTAGE, on
+the assumed pin2=CLK/pin3=DATA mapping: continuous clock (all pins); VDD + continuous; VDD +
+burst (idle high AND low); VDD + continuous + DATA-button. The mic drives **nothing** on any
+pin under every stimulus we can produce — the no-rewire space is exhausted. The unverified
+assumption is **which pin is CLK vs DATA** (only physical order 1-2-3 and "all float" were ever
+confirmed). Next: cheap no-rewire checks (**slow clock 0.5–2 kHz**, **pure-passive button** with
+AWG off), then the definitive **pin-permutation sweep** (needs rewiring — each pin as clock/VDD
+in turn).

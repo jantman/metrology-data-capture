@@ -133,13 +133,23 @@ class Scope(SCPI):
         self.write(":TRIGger:SWEep AUTO")
         self.write(":RUN")
         time.sleep(settle)
+        return self.measure_item(ch, "VAVG", tries=tries)
+
+    def measure_item(self, ch, item="VPP", tries=10):
+        """Read any :MEASure item on a channel, rejecting the ~9.9E37 "not ready" sentinel.
+
+        Assumes the scope is already acquiring (RUN/AUTO) with a suitable timebase. More robust
+        than digitising RAW memory for bursty signals: the live measurement re-evaluates every
+        sweep, so an auto-repeating burst is caught even when a single RAW window lands in the
+        idle gap.
+        """
         v = float("inf")
         for _ in range(tries):
-            v = float(self.query(f":MEASure:ITEM? VAVG,CHANnel{ch}"))
+            v = float(self.query(f":MEASure:ITEM? {item},CHANnel{ch}"))
             if abs(v) < 1e30:  # real reading (sentinel is ~9.9E37)
                 return v
             time.sleep(0.3)
-        raise RuntimeError(f"VAVG on CH{ch} never resolved (last={v:.2e}); scope not acquiring?")
+        raise RuntimeError(f"{item} on CH{ch} never resolved (last={v:.2e}); scope not acquiring?")
 
     def wait_stop(self, timeout=15):
         deadline = time.time() + timeout

@@ -30,7 +30,16 @@ MARGIN = 1.8
 
 
 def configure_burst(awg, freq, amp, ncycles, period_s):
-    """DG902 Pro N-cycle burst, internal auto-repeat. Verified SCPI (2026-07-17)."""
+    """DG902 Pro N-cycle burst, internal auto-repeat.
+
+    Verified 2026-07-25 (scope-measured on the driven pin): ":TRIGger1:SOURce IMMediate" IS
+    the auto-repeat source — it re-fires the N-cycle burst every :BURSt:INTernal:PERiod
+    (pin VPP~3 V, VAVG consistent with a 21-cyc/10 ms train). The DG902 Pro does NOT have a
+    ":SOURce1:BURSt:TRIGger:SOURce" tree (-113); BUS/EXT just wait for a trigger that never
+    comes. Earlier "no burst" results were the 1 ohm-load over-drive + a fragile NORMal-sweep
+    capture, not the trigger source. Caveat: the burst IDLES HIGH between trains (no working
+    idle-level command on this firmware) — all 21 edges are still delivered each burst.
+    set_highz() reads back and raises if the load isn't true High-Z (see scpi_lib)."""
     awg.set_highz(1)
     awg.write(":SOURce1:FUNCtion SQUare")
     awg.write(f":SOURce1:FREQuency {freq}")
@@ -40,7 +49,7 @@ def configure_burst(awg, freq, amp, ncycles, period_s):
     awg.write(":SOURce1:BURSt:MODE TRIGgered")
     awg.write(f":SOURce1:BURSt:NCYCles {ncycles}")
     awg.write(f":SOURce1:BURSt:INTernal:PERiod {period_s}")
-    awg.write(":TRIGger1:SOURce IMMediate")  # auto-repeat bursts at the internal period
+    awg.write(":TRIGger1:SOURce IMMediate")  # auto-repeat the burst at INTernal:PERiod
 
 
 def main():

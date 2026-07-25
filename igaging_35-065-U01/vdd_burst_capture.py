@@ -92,19 +92,32 @@ def main():
         awg.output(True, ch=1)
         time.sleep(0.3)
 
-        tb = args.window_ms / 1000.0 / 10.0
-        # AUTO sweep => a window is guaranteed even if trigger alignment is imperfect.
-        scope.arm_single(trig_ch=drive_ch, level=args.amp * 0.5, slope="POSitive",
-                         mdepth=1_000_000, tb_scale=tb, sweep="AUTO")
-        status = scope.wait_stop(timeout=15)
+        # Decision is driven by LIVE :MEASure (re-evaluates every sweep, so an auto-repeating
+        # burst is always caught) — NOT by digitising one RAW window, whose memory time-span can
+        # be shorter than the 10 ms burst period and land entirely in the idle gap. Window must
+        # span >1 burst period so a full train is always visible.
+        win_ms = args.window_ms if args.mode == "continuous" else max(args.window_ms,
+                                                                       args.period_ms * 2.5)
+        scope.write(":TRIGger:SWEep AUTO"); scope.write(":RUN")
+        scope.write(f":TIMebase:MAIN:SCALe {win_ms / 1000.0 / 10.0}")
+        time.sleep(1.2)
+        vpp = {ch: scope.measure_item(ch, "VPP") for ch in (1, 2, 3)}
+        vtop = {ch: scope.measure_item(ch, "VTOP") for ch in (1, 2, 3)}
+        vbase = {ch: scope.measure_item(ch, "VBASe") for ch in (1, 2, 3)}
         os.makedirs(OUTDIR, exist_ok=True)
-        vals = {}
-        for ch in (1, 2, 3, 4):
-            pre, raw = scope.read_raw(ch)
-            with open(f"{OUTDIR}/{tag}_ch{ch}.bin", "wb") as f: f.write(raw)
-            with open(f"{OUTDIR}/{tag}_ch{ch}.pre", "w") as f: f.write(pre)
-            vals[ch] = digitize_transitions(pre, raw)
         scope.screenshot(f"{OUTDIR}/{tag}_scope.png")
+        # Best-effort raw record for later Phase-B analysis (may miss the burst; decision above
+        # doesn't depend on it).
+        try:
+            scope.arm_single(trig_ch=drive_ch, level=args.amp * 0.5, mdepth=1_000_000,
+                             tb_scale=win_ms / 1000.0 / 10.0, sweep="AUTO")
+            scope.wait_stop(timeout=10)
+            for ch in (1, 2, 3, 4):
+                pre, raw = scope.read_raw(ch)
+                with open(f"{OUTDIR}/{tag}_ch{ch}.bin", "wb") as f: f.write(raw)
+                with open(f"{OUTDIR}/{tag}_ch{ch}.pre", "w") as f: f.write(pre)
+        except Exception as e:
+            print(f"  (raw record skipped: {e})")
     finally:
         try:
             awg.write(":SOURce1:BURSt:STATe OFF")
@@ -114,46 +127,53 @@ def main():
         awg.close(); scope.close()
         print("AWG CH1+CH2 OFF.")
 
-    print(f"\ntrigger status: {status}")
-    clk_trans, clk_vpp = vals[drive_ch]
-    print(f"  CLK pin{args.clk_pin}: {clk_trans} transitions, vpp={clk_vpp:.3f}V")
+    clk_vpp = vpp[drive_ch]
+    print(f"\n  CLK pin{args.clk_pin}: VPP={clk_vpp:.3f}V (VTOP={vtop[drive_ch]:.2f} "
+          f"VBASe={vbase[drive_ch]:.2f})")
 
     # Guard: if the clock isn't really on the driven pin, this capture proves nothing.
     if clk_vpp < CLK_PRESENT_V:
-        print(f"\n!!! CLOCK NOT CAPTURED (vpp {clk_vpp:.3f}V < {CLK_PRESENT_V}V expected ~{args.amp}V).")
+        print(f"\n!!! CLOCK NOT CAPTURED (VPP {clk_vpp:.3f}V < {CLK_PRESENT_V}V expected ~{args.amp}V).")
         print("    The driven pin shows no clock, so any 'no response' below is meaningless.")
         print("    Check: CH1 lead on pin 2? series R intact? AWG CH1 actually output ON?")
-        print(f"    (In burst mode the free-run may not be firing — try --mode continuous.)")
         return
 
     base = CROSSTALK[args.clk_pin]
     hit = None
     for p in [q for q in PIN_CHANS if q != args.clk_pin]:
-        trans, vpp = vals[PIN_CHANS[p]]
+        pv, pt, pb = vpp[PIN_CHANS[p]], vtop[PIN_CHANS[p]], vbase[PIN_CHANS[p]]
         expect = base[p] * clk_vpp
-        real = vpp > expect * MARGIN and vpp > 0.5
-        note = "  <== ABOVE CROSSTALK — REAL DATA!" if real else "  (crosstalk-level)"
+        # Coupling swings SYMMETRICALLY about 0 (pt ~= -pb); a driven CMOS line sits on fixed
+        # rails (asymmetric — offset from 0). Flag both amplitude AND shape.
+        centered = abs(pt + pb) < 0.3 * pv if pv > 0.1 else True
+        real = pv > expect * MARGIN and pv > 0.5 and not centered
         tagp = "DATA?" if p == args.data_pin else "watch"
-        # pin1 is now a driven VDD rail, not a floating victim — its crosstalk cmp is moot.
         if p == 1:
-            note = "  (pin1 = VDD rail now; ignore)"
-        print(f"  {tagp} pin{p}: {trans} transitions, vpp={vpp:.3f}V (expect xtalk ~{expect:.3f}V){note}")
+            note = "  (pin1 = VDD rail; ignore)"
+        elif real:
+            note = "  <== ABOVE CROSSTALK & RAIL-CLAMPED — REAL DATA!"
+        elif pv > expect * MARGIN and pv > 0.5:
+            note = "  (large but symmetric about 0 — still coupling)"
+        else:
+            note = "  (crosstalk-level)"
+        print(f"  {tagp} pin{p}: VPP={pv:.3f}V VTOP={pt:.2f} VBASe={pb:.2f} "
+              f"(xtalk ~{expect:.2f}V){note}")
         if real and p != 1:
             hit = p
 
     print("\n==== SUMMARY ====")
     if hit:
-        print(f"*** Pin {hit} drove real data with pin 1 powered -> VDD HYPOTHESIS CONFIRMED. "
-              f"CLK=pin{args.clk_pin}, DATA=pin{hit}, VDD=pin1. ***")
+        print(f"*** Pin {hit} drove real, rail-clamped data with pin 1 powered ({args.mode} clock) "
+              f"-> CLK=pin{args.clk_pin}, DATA=pin{hit}, VDD=pin1. ***")
         print(f"Analyze: python analyze_capture.py {OUTDIR}/{tag} "
               f"--clk-pin {args.clk_pin} --data-pin {hit}")
     else:
         print(f"Clock confirmed present, VDD={vv:.2f}V on pin1, but pin{args.data_pin} stayed at "
-              f"crosstalk level. VDD-on-pin1 alone did not wake the data interface.")
+              f"crosstalk level ({args.mode} clock). Did not wake the data interface.")
         if args.mode == "continuous":
             print("Next: try --mode burst (framing hypothesis), or a different clk/data pairing.")
         else:
-            print("Next: try --mode continuous, a different clk pin, or reconsider pin1=VDD.")
+            print("Next: burst idles HIGH — try idle-low, a different clk pin, or reconsider pin1=VDD.")
 
 
 if __name__ == "__main__":
