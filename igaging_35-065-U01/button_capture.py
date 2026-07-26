@@ -1,4 +1,4 @@
-"""Button-gated clock-injection probe (see BRINGUP_PLAN.md Phase A fallback).
+"""Button-gated clock-injection probe (see ARCHIVE/BRINGUP_PLAN.md Phase A fallback).
 
 Hypothesis: the mic only drives DATA while its front-panel *Data/Hold* button is held
 (an output-enable gate). Phase A drove a continuous clock into each pin and saw only

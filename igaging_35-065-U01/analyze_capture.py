@@ -1,4 +1,4 @@
-"""Offline analysis of a 4-channel clock-injection capture (see BRINGUP_PLAN.md).
+"""Offline analysis of a 4-channel clock-injection capture (see ARCHIVE/BRINGUP_PLAN.md).
 
 Given a capture prefix written by clock_injection.py (e.g. captures/inj_p1_2.2v), this:
   1. Loads + scales every channel (BYTE data via its preamble).

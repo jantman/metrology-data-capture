@@ -1,4 +1,4 @@
-"""Passive self-clocked-frame probe (see BRINGUP_PLAN.md Phase A, button hypothesis).
+"""Passive self-clocked-frame probe (see ARCHIVE/BRINGUP_PLAN.md Phase A, button hypothesis).
 
 Tests whether pressing the mic's DATA button emits a SINGLE self-clocked frame — i.e. the
 mic drives BOTH clock and data itself for one frame, with NO external clock (the Mitutoyo/SPC

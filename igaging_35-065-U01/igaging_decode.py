@@ -1,6 +1,6 @@
 """Reference decoder for the iGaging 35-065-U01 21-bit clock/data frame.
 
-STATUS: HYPOTHESIS until bench-confirmed (see BRINGUP_PLAN.md phase 4-5). The reported
+STATUS: HYPOTHESIS until bench-confirmed (see ARCHIVE/BRINGUP_PLAN.md phase 4-5). The reported
 iGaging/Grizzly 21-bit encoding is:
     - 21 data bits, LSB-first, one's-complement signed (bit20 = sign)
     - value is RAW ABSOLUTE ENCODER TICKS, not the displayed number (no units/zero in stream)

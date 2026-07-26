@@ -1,4 +1,4 @@
-"""Supply VDD to pin 1, then clock pin 2 and read DATA on pin 3 (PROTOCOL_RESEARCH.md hyp #3).
+"""Supply VDD to pin 1, then clock pin 2 and read DATA on pin 3 (ARCHIVE/PROTOCOL_RESEARCH.md hyp #3).
 
 Leading hypothesis after all single-pin/burst/pull-down tests came up silent: the mic's
 CLK/DATA *interface buffer* is powered from connector pin 1 (VDD), which the reader is meant

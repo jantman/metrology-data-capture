@@ -1,4 +1,4 @@
-"""Clock-injection bring-up for the iGaging 35-065-U01 micrometer (see BRINGUP_PLAN.md).
+"""Clock-injection bring-up for the iGaging 35-065-U01 micrometer (see ARCHIVE/BRINGUP_PLAN.md).
 
 The mic is host-clocked and silent until an external clock is driven into its CLK pin.
 This script drives a square-wave clock from the DG902 Pro AWG into ONE candidate pin

@@ -7,6 +7,26 @@
 > **Note on the title:** file name kept as requested (`igaging_protcol_research.md`), including the
 > `protcol` spelling.
 
+> ## ⚠ Read `BENCH_LOG.md` before acting on §0 or §7
+>
+> This document surveys what the *community* has published. It was written without reference to
+> the bench work on this unit, and several of its higher-confidence claims are **already
+> falsified here**:
+>
+> - **F4 / §0 / §4.1 pin mapping is wrong for this unit.** Measured: **pin 1 is the mic's only
+>   output** (it drew 0.0 mA when fed 3 V, so it is not VDD); **pins 2 and 3 are inputs**, and
+>   they are symmetric. Nothing shifts data out of pin 3.
+> - **§7 steps 2, 3 and 5 are already done** (negative). **Step 4 is unperformable:** pin 4 is
+>   hard-grounded on this unit, so REQ cannot live there.
+> - **§10 open question 6 is answered:** the tool needs no external VDD.
+>
+> That last point cuts the other way too, and usefully: by **this document's own §3
+> discriminator** — ID pin at 0 Ω to GND ⇒ 21-bit family — this unit is **not** Digimatic.
+>
+> Still fully applicable and acted upon: **F2** (not 5 V tolerant), **F5** (~100 kΩ pull-ups),
+> **F8** (two's complement), **F9** (counts-per-unit candidates), **§4.2** (20 % duty, idle LOW),
+> and the in-line cable-sniff method in §7.
+
 ---
 
 ## 0. Executive summary
@@ -512,5 +532,3 @@ remaining unknown (F9).
 - [iGaging — 35-A67-xx instruction sheet (PDF)](https://www.igaging.com/index_html_files/35-A67-xx%20instruction.pdf)
 - [Penn Tool Co. — 35-065-U01 specifications](https://www.penntoolco.com/igaging-0-1-ip65-ez-data-twin-force-digital-micrometer-35-065-u01/)
 - [ideaengineering.us — 100-700-USB-MC micro USB data cable & control box](https://ideaengineering.us/store-3/pageid1904modelnumber100-700-usb-mc/)
-</content>
-</invoke>

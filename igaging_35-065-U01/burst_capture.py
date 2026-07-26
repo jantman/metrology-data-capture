@@ -1,4 +1,4 @@
-"""Burst-mode clock injection (see PROTOCOL_RESEARCH.md hypothesis #1).
+"""Burst-mode clock injection (see ARCHIVE/PROTOCOL_RESEARCH.md hypothesis #1).
 
 Real iGaging 21-bit readers (Yuriy's Toys, Rysium) do NOT clock continuously — they emit
 **21 clock pulses (~2.33 ms) then an idle gap (~7 ms)** and repeat (~100-150 Hz). Our earlier

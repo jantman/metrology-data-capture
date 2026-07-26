@@ -5,6 +5,12 @@
 `claude_desktop_initial_investigation.md` (§0–§11.16), and `igaging_protcol_research.md`,
 cross-checked against the bench tooling (`*.py`) and the raw capture artifacts in `captures/`.
 
+> **File-layout note:** this review was written against the pre-restructure layout, and its
+> filename references are preserved as historical record. `claude_desktop_initial_investigation.md`
+> §11 is now **`BENCH_LOG.md`** (same §11.x numbering, chronologically reordered); that file plus
+> `BRINGUP_PLAN.md` and `PROTOCOL_RESEARCH.md` now live in **`ARCHIVE/`**. Current entry point is
+> **`STATUS.md`**.
+
 > **Update note:** §§0–9 were written before `igaging_protcol_research.md` existed. That document
 > is reviewed in **§10**, and the places where it changes an earlier finding are marked
 > **[amended — §10]** inline. Nothing in §§1–4 was weakened by it; several items in §5 and §8 got
