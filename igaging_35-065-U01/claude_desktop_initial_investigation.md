@@ -683,6 +683,35 @@ pin-3 drive); (2) capture the **whole ~10 ms event** at high resolution with a *
 → Phase B. Tooling: `req_capture.py` (`--capture`, `--cap-tb-us`, byte-range debug);
 `findings/` holds the milestone screenshots.
 
+### 11.15 Clock-sweep WITH the button — pin roles nailed down (2026-07-26)
+
+Prompted by "have we clocked the *other* pins with the button?" — we'd only ever added the button
+to the pin-3 drive. Swept all three clock positions with all pins pulled up + the DATA button
+pressed, ~10 Hz AWG square on the driven pin:
+
+| AWG drives + button | Result |
+|---|---|
+| **pin 2** | **pin 1 driven LOW (−0.7 V)** |
+| **pin 3** | **pin 1 driven LOW (−0.7 V)** |
+| **pin 1** | nothing (pin 2 & pin 3 stay at the rail) |
+
+**PIN ROLES (this unit, Micro-USB connector):** **pin 1 = the mic's sole OUTPUT** (data / strobe);
+**pin 2 and pin 3 = INPUTS** — driving *either* one (with the button) makes the mic assert pin 1;
+driving pin 1 itself does nothing. The trigger for the pin-1 response is **(DATA button held) AND
+(edges on pin 2 or pin 3)** — both are required (button-alone §11.12 and drive-alone §11.13 each do
+nothing). Reliable NORMal-mode readout (added `Scope.read_screen`, + a settle after the trigger)
+confirmed pin 1's response is a **long ~10 ms low strobe, independent of clock rate (10 Hz–2 kHz)** —
+a "data-ready", not clocked bits; the measurement doesn't shift out from a continuous clock on a
+single input.
+
+**MOST PROMISING UNTESTED AVENUE:** we've only ever driven **one input at a time.** A real reader
+almost certainly drives **both** pin 2 and pin 3 in a coordinated handshake (one = CLK, the other =
+REQ / direction / gate). The DG902 has a **second channel** — next session: drive pin 2 and pin 3
+**together** (sweep CLK/REQ role assignments and phase) with the button, and watch pin 1 for
+shifted DATA. Also test whether pin 1's pattern tracks the **spindle reading** (→ it's DATA) vs is
+fixed (→ pure strobe). If coordinated 2-input driving still yields no bits, the `100-700-USB-MC`
+cable sniff is the definitive decode reference.
+
 **Photo index** (`board_teardown/`): `PICT0001` exterior (TwinForCe/USB Mic); `PICT0011` full
 battery-side board; `PICT0022/0023/0028/0037` connector + jumper matrix + Q1/Q2 close-ups.
 

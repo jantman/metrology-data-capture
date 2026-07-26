@@ -178,6 +178,24 @@ class Scope(SCPI):
             start = stop + 1
         return pre, bytes(data)
 
+    def read_screen(self, ch):
+        """Read the on-screen (NORMal) waveform (~1000 pts) — reliable for a frozen single-shot.
+
+        The DHO814's RAW multi-channel readback is inconsistent (point count varies; a 2nd
+        channel read can come back short). NORMal mode returns the displayed record every time,
+        so it's the dependable path for grabbing a triggered capture — at the cost of ~1000 pts,
+        so pick a timebase where the feature of interest is resolved at that point count.
+        """
+        self.write(f":WAVeform:SOURce CHANnel{ch}")
+        self.write(":WAVeform:MODE NORMal")
+        self.write(":WAVeform:FORMat BYTE")
+        pre = self.query(":WAVeform:PREamble?")
+        points = int(float(pre.split(",")[2]))
+        self.write(":WAVeform:STARt 1")
+        self.write(f":WAVeform:STOP {points}")
+        data = self.query_block(":WAVeform:DATA?")
+        return pre, bytes(data)
+
     def screenshot(self, path):
         data = self.query_block(":DISPlay:DATA? PNG")
         with open(path, "wb") as f:

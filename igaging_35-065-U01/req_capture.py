@@ -73,9 +73,10 @@ def main():
                              mdepth=1_000_000, tb_scale=args.cap_tb_us / 1e6, sweep="NORMal")
             status = scope.wait_stop(timeout=args.secs)
             if status == "STOP":
+                time.sleep(0.5)  # let the acquisition settle before reading (avoids stale/flat)
                 tag = f"req_p{args.req_pin}_frame"
                 for c in (1, 2, 3, 4):
-                    pre, raw = scope.read_raw(c)
+                    pre, raw = scope.read_screen(c)  # NORMal read — reliable (see scpi_lib)
                     with open(f"{OUTDIR}/{tag}_ch{c}.bin", "wb") as f: f.write(raw)
                     with open(f"{OUTDIR}/{tag}_ch{c}.pre", "w") as f: f.write(pre)
                     t, v = digitize_transitions(pre, raw)
