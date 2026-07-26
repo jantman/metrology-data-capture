@@ -199,7 +199,14 @@ addresses it.**
 
 ## 2. Internal contradictions between sections
 
-### 2.1 Two open-collector drivers (Q1, Q2) vs. one output pin — never reconciled
+### 2.1 Two open-collector drivers (Q1, Q2) vs. one output pin — largely resolved
+
+> **RESOLVED IN PRINCIPLE (2026-07-26, `BENCH_LOG.md` §11.19).** The contradiction dissolves once
+> pin 1 is understood: it is the DATA button's **passive switch contact**, so it is not driven by
+> Q1 or Q2 at all. That leaves **pins 2 and 3 as the only candidates for the two drivers** — a
+> clean one-to-one mapping, and it implies those pins are *outputs as well as inputs*, i.e. the mic
+> can pull either low. Still an inference, not a measurement; ringing Q1/Q2's collectors is what
+> would confirm it, and that is now the main reason to open the case (§5.1).
 
 - §11.11: *"Q1, Q2 = MMBT3904 NPN, each fed by a 330 kΩ base resistor … **textbook
   open-collector output drivers**."*
@@ -788,6 +795,11 @@ repo.
 5. Fix the §1 repeatability figure, or mark it unverified.
 6. Record the >9.5 V over-drive (§11.8) and the FPC repair (§11.11) as named events with a
    *low* assessed damage risk and the reasoning why (§4) — not as a leading hypothesis.
+
+> **Status 2026-07-26:** steps 7–8 are done or superseded, and steps 10–12 were overtaken by
+> §11.19 (pin 1 is a button, so there is no strobe window to gate a burst inside). The live list is
+> now `STATUS.md`'s — chiefly `interface_sweep.py`, the first search of pins 2/3 with a trigger
+> armed on a data pin. The items below are kept for the reasoning behind each.
 
 **Bench work — [closed-case] only, in order (no purchase, no opening the mic):**
 7. DMM through the breakout, battery out: diode-test pins 1/2/3 to GND and compare the three.

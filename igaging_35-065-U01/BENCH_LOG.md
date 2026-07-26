@@ -1012,7 +1012,21 @@ pin 1 low. No human in the loop, so the run can be long, repeated, and unattende
 
 Then sweep clock rate, duty (the documented **20 %** has never been delivered — `review.md`
 §5.5a), burst framing, and the pin 2/pin 3 role swap, watching for pin 3 to be pulled low. This is
-the first properly-instrumented search of the actual interface.
+the first properly-instrumented search of the actual interface — implemented as
+**`interface_sweep.py`**, with a positive control on the detection path and a clock-present guard
+per combination.
+
+#### And an inference that raises the odds: Q1/Q2 must drive pins 2 and 3
+
+The board has **two** open-collector drivers (Q1/Q2, §11.11). Pin 1 is now known to be a passive
+switch, so neither of them drives it. **That leaves pins 2 and 3 as the only candidates** — a clean
+one-to-one mapping which also dissolves the long-standing "two drivers but only one output pin"
+contradiction (`review.md` §2.1).
+
+If it holds, **pins 2 and 3 are outputs as well as inputs**: the mic can pull either low. That is
+precisely what the sweep is looking for, and it means the **role swap matters** — watch pin 2 while
+clocking pin 3, not only the reverse. Still an inference; ringing Q1/Q2's collectors would confirm
+it, and that is now the main reason to open the case.
 
 ---
 

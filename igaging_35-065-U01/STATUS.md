@@ -91,6 +91,19 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
   used are within ~2× of what these weak drivers can sink, so a driven-but-weak pin could read as
   "held at the rail." See `review.md` §3.4 and §5.7a.
 
+## Inference worth testing: Q1 and Q2 most likely drive pins 2 and 3
+
+Not measured — flagged because it changes what to expect from step 2. The board has **two**
+open-collector drivers (Q1/Q2, MMBT3904 + 330 kΩ base, §11.11). Pin 1 is now known to be a passive
+switch, so it is **not** driven by either of them. That leaves pins 2 and 3 as the only candidates.
+
+If that holds, **pins 2 and 3 are outputs as well as inputs** — the mic can pull either low — and
+the long-standing "two drivers but only one output pin" contradiction dissolves. It also means the
+role swap in step 2 matters: watch pin 2 while clocking pin 3, not just the reverse.
+
+Ringing Q1/Q2's collectors to the connector pins is what would settle it, and that is now the main
+reason to open the case (step 7).
+
 ## Not yet known
 
 - What carries the measurement data. No connector pin has shown it under any stimulus tried.
@@ -116,16 +129,19 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
    scope   -> pin 3           armed trigger on a FALLING edge = the mic driving DATA
    ```
    **No test has ever armed a trigger on a data pin during a clocked read** — §11.12 used the
-   broken VMIN polling loop and §11.16 always triggered on pin 1, i.e. on the button. Sweep clock
-   rate, **20 % duty** (never once delivered — `review.md` §5.5a), burst framing, and the pin 2 /
-   pin 3 role swap.
-3. ~~Capture the pin-1 strobe end~~ **DONE** (§11.18/§11.19): ~155 ms on a tap, indefinite on a
-   hold — it is a button contact, so there is nothing further to learn from it.
-4. **~~Estimate the internal rail by sweeping the input threshold~~ — DOESN'T WORK.** Attempted
-   2026-07-26 and **void**: the response is not gated on the driven input at all, so ramping the
-   drive amplitude proves nothing (§11.18). The rail remains unmeasured; a genuine closed-case
-   method for it is still wanted. Separately, still worth doing: redo the key pull-up tests at
-   **100 kΩ** rather than 10 kΩ (`review.md` §5.7a).
+   broken VMIN polling loop and §11.16 always triggered on pin 1, i.e. on the button.
+   **`interface_sweep.py`** does it: 32 combinations of button held/released × 9k/2k/500/100 Hz ×
+   50 %/20 % duty × continuous/burst, ~5 min unattended, with a positive control on the detection
+   path and a clock-present guard per combination. If negative, swap AWG CH2 to pin 3 and re-run
+   with `--clk-pin 3 --data-pin 2`.
+3. **Redo the decisive tests at 100 kΩ** rather than 10 kΩ pull-ups (`review.md` §5.7a). Q1/Q2's
+   330 kΩ base resistors cap the sink at ~0.7 mA against the 0.3 mA a 10 kΩ pull-up demands — only
+   ~2× margin, so a weakly-driven pin could read as "held at the rail". Cheap insurance if step 2
+   comes back negative.
+4. ~~Capture the pin-1 strobe end~~ **DONE** (§11.18/§11.19) — it is a button contact, nothing
+   further to learn. ~~Estimate the rail by sweeping the input threshold~~ **DOESN'T WORK** — the
+   response was never gated on the driven input, so the method is invalid (§11.18/§11.19). **The
+   internal rail remains unmeasured and there is currently no closed-case method for it.**
 
 ### Purchases — recommended, not a last resort
 
@@ -144,18 +160,21 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
 ### [needs board access] — LAST, and only as one batched session
 
 7. Do the whole checklist in a single opening (`review.md` §5.1), never for one item alone:
-   ring **Q1/Q2 collectors** to pins 1/2/3 (resolves the two-drivers/one-output contradiction),
-   trace the **`J10–J81` jumper matrix**, trace the **DATA button contacts** (in the reference
-   Digimatic design the cable's data button is part of the port interface, not a private MCU
-   input), measure the rail across **C4/C5**, and compare **Q1/Q2 in-circuit**. Reinforce the FPC
-   while it is open.
+   ring **Q1/Q2 collectors** to pins 2/3 (see the inference below — this is now the main reason to
+   open it), trace the **`J10–J81` jumper matrix**, check whether the **DATA button** also reaches
+   an MCU pin or is *only* a switch to the connector, measure the rail across **C4/C5**, and
+   compare **Q1/Q2 in-circuit**. Reinforce the FPC while it is open.
 
-> **Honest assessment.** Steps 1–2 are free information — do them. Steps 3–4 are the best remaining
-> guesses, but a timed handshake has too many free parameters (sequence, timing, which pin, duty,
-> gating) to brute-force reliably from outside; call it **~15–20 % combined**. Steps 5–6 are the
-> only path with a guaranteed outcome, and five bench sessions in, ~$85 is cheap against the
-> alternative. Step 7 is individually the highest-information work in the project but is gated
-> behind a re-open that risks the unit — which is exactly why it now sits last rather than first.
+> **Honest assessment (revised after §11.19).** Step 2 is now the pivotal experiment and its odds
+> are better than the old "~15–20 % for a blind handshake search", because the target has shrunk:
+> the interface is two wires, not three, and the previous negatives on those two wires were all
+> produced by instrumentation now known to be broken. Call it a genuine coin-toss rather than a
+> long shot. Step 3 is cheap insurance on the same question.
+>
+> Steps 5–6 remain the only path with a *guaranteed* outcome and are still worth buying regardless
+> — the logic analyzer especially, at ~$15, since the 1000-point screen read has distorted results
+> throughout. Step 7 is the highest-information work but is gated behind a re-open that risks the
+> unit, which is why it sits last.
 
 ## Was the port damaged by the over-drive? — NO (closed to a low residual)
 
@@ -198,6 +217,11 @@ question.
 | `review.md` | Audit of the above against the raw captures — read before trusting a conclusion |
 | `README.md` | What the device is |
 | `ARCHIVE/` | Retired docs, superseded but kept for provenance |
-| `*.py` | Bench tooling (`scpi_lib`, `psu_lib` + per-experiment scripts) |
+| `interface_sweep.py` | **The current experiment** — automated search of pins 2/3 for a driven data line |
+| `preflight.py` | Verifies the rig wiring before a long run; no button pressing needed |
+| `diode_test.py` | Closed-case port health check (diode + resistance modes) |
+| `button_only_capture.py`, `strobe_end_capture.py`, `button_switch_test.py` | The pin-1 characterisation that led to §11.18/§11.19 |
+| `scpi_lib.py`, `psu_lib.py`, `dmm_lib.py` | Instrument clients (scope+AWG, B&K PSU, OWON DMM) |
+| other `*.py` | Earlier per-experiment scripts, largely superseded |
 | `captures/` | Raw scope captures (git-ignored) |
 | `findings/`, `board_teardown/`, `PICT00*.jpg` | Milestone screenshots and teardown photos |
