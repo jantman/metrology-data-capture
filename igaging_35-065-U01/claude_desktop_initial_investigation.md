@@ -594,3 +594,53 @@ Instrument state carried forward (all verified this session): AWG raw-SCPI **:50
 (`Scope.measure_item`) not RAW-window digitising for bursty signals; VMAX/VMIN not VTOP/VBASe on
 coupling-only lines; **re-check probe 1×/10× switches after handling.** Tools ready to reuse:
 `pin_sweep.py`, `vdd_burst_capture.py`, `button_data_capture.py`, `scpi_lib.py`.
+
+### 11.11 Board teardown (2026-07-25/26) — the OPEN-COLLECTOR hypothesis
+
+With injection exhausted, opened the housing for photos (in `board_teardown/`). **Could not reach
+the MCU side** — the LCD is soldered to the board and the board/LCD assembly is glued into the
+front cover; separating it needs enough force to crack the glass, so it was left intact (only a
+~1 mm gap, no borescope access). In the process the **read-head FPC retaining-clip tabs cracked
+off** — the flex must be re-secured (reseat + Kapton tape / dab of glue, keep adhesive off the
+contacts) before the mic is trusted again.
+
+**What the accessible (battery) side shows** (`board_teardown/PICT0011,0022,0023,0028,0037.jpg`):
+- Board silkscreen **`MD311-4.1A`**.
+- A **jumper-configuration matrix** `J10–J81` (pad pairs) → this is a **multi-mode board**; bridged
+  jumpers select which signals route to which Micro-USB pins. Different iGaging SKUs share it.
+- **Q1, Q2 = SOT-23 marked `1AM` = MMBT3904 NPN**, each fed by a **330 kΩ base resistor**
+  (R1, R2 = "334"; also a "473" = 47 kΩ). MCU-GPIO → 330 k → NPN base, collector = output pin,
+  emitter = GND: **textbook open-collector output drivers.**
+- 5-pin **Micro-USB**, 6-pin read-head **FPC**, CR2032. The **MCU is a chip-on-board blob on the
+  hidden LCD side** — no part number obtainable.
+
+**THE HYPOTHESIS (explains every negative to date):** the data-port CLK/DATA are **open-collector**
+— they can only pull the line **LOW** and float (high-Z) otherwise, so they require an **external
+pull-UP** to ever read HIGH. This matches the measured "all pins float at idle, no internal
+pull-ups." **Every test we ran used a pull-DOWN (to kill crosstalk) or no pull-up at all — which
+MASKS an open-collector output** (the line sits at ground regardless of the transistor), so the
+mic pulling DATA low for bits produced no visible change. It also undermines the "host-clocked"
+conclusion (§11.4): that came from *passive* listening **without pull-ups**, which likewise can't
+see OC outputs — so the mic may actually be **device-as-master** (self-clocked, Digimatic-style,
+two OC drivers = clock + data).
+
+**NEXT TEST PLAN — pull-UPs, not pull-downs (tooling written, ready to run):**
+- **+3 V rail from the B&K 169x bench supply** (`psu_lib.py`; 3.00 V, **20 mA current limit**,
+  OVP 3.6 V; **−** → pin 4). Bench supply chosen over the AWG for the settable current-limit
+  safety net, cleaner DC, and to keep the AWG free for the clock. Pull each signal pin UP via
+  **~10 kΩ**.
+- **TEST 1 — passive (`pullup_passive_monitor.py`):** pull all 3 pins to 3 V, inject nothing,
+  watch for any pin dipping off the rail while pressing DATA / turning the spindle (device-as-
+  master / self-clocked OC). If a pin dips, `--capture-pin N` grabs the frame on a falling edge.
+- **TEST 2 — clocked (`pullup_clock_capture.py`):** if Test 1 is quiet, drive the clock on the
+  CLK pin with DATA pulled UP, watch DATA dip low for bits (host-clocked OC). Rotate clk/data
+  pins / try `--mode burst` as needed.
+- The **spindle-MOTION** variable (§11.10 #1) folds into both: press DATA *and* move the spindle
+  during the window, in case the output only updates on change.
+
+If pull-ups finally reveal a driven line → Phase B (framing/bit-order/sign) via
+`analyze_capture.py`. If even pull-ups are silent, the remaining option is sniffing the genuine
+`100-700-USB-MC` host cable (§11.10 #3).
+
+**Photo index** (`board_teardown/`): `PICT0001` exterior (TwinForCe/USB Mic); `PICT0011` full
+battery-side board; `PICT0022/0023/0028/0037` connector + jumper matrix + Q1/Q2 close-ups.
