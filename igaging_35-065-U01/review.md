@@ -763,7 +763,10 @@ repo.
 13. An 8-channel logic analyzer (~$15) **before** the $70 cable (§5.4) — now independently
     recommended by `igaging_protcol_research.md` §7.3. It removes the readout limitation that has
     distorted every result to date and is the right instrument for step 14 anyway.
-14. Then the cable sniff — **in-line**, per `igaging_protcol_research.md` §7: because the control
+14. **Cable session, step 0 — ohm out the adapter cable before plugging anything in** (§11.2):
+    buzz all five micro-USB pins against all ten 2×5 pins. Five clean 1:1 connections ⇒ passive
+    cable ⇒ the complete micro-USB pinout including REQ, for free. Then the sniff —
+    **in-line**, per `igaging_protcol_research.md` §7: because the control
     box is a USB HID keyboard, you can correlate each captured raw frame against the exact decimal
     string it types, which settles framing *and* the counts-per-unit constant in one session. The
     bench docs' "sniff the cable" plan never noted this.
@@ -854,7 +857,38 @@ community has published. But §0's executive summary asserts the conclusion far 
 than §2's own star ratings support, and a reader who starts at §0 and stops there will rebuild a rig
 this project has already run three times. **§0 needs a banner pointing at §11 of the bench log.**
 
-### 10.3 The most valuable thing in it: §3 kills the Digimatic hypothesis
+### 10.3 ⚠ RETRACTED — §3 does *not* kill the Digimatic hypothesis (my error)
+
+> **This subsection was wrong and is retracted.** I argued that because the documented mapping puts
+> Digimatic's REQ on micro-USB pin 4 (ID), and §11.3 measured pin 4 hard-grounded, this unit cannot
+> be Digimatic. **That inference is unsound**, for a reason visible in this very review: the pin-4
+> assignment comes from `igaging_protcol_research.md`'s generic iGaging mapping — **the same mapping
+> §10.2 shows is already falsified on this unit** (it says pin 1 = VDD and pin 3 = tool-driven DATA;
+> both are wrong here). You cannot rule out a protocol using a pin assignment from a mapping you
+> have just demonstrated does not apply.
+>
+> **Our own data actually fits Digimatic better than I allowed.** This unit has **three signal pins
+> plus two grounds**. Digimatic minimally needs REQ + CLK + DATA + GND — and **VDD is unnecessary
+> here because the mic is self-powered** (pin 1 drew 0.0 mA, §11.12). Three signals is exactly the
+> requirement. The REQ pin simply isn't pin 4; with pin 1 not being VDD, the whole generic mapping
+> shifts.
+>
+> **And it resolves §2.1.** Two open-collector drivers (Q1/Q2) with only one identified output pin
+> is precisely what Digimatic predicts: Q1 and Q2 = the device's CK and DATA outputs.
+>
+> **The counter-evidence is real but soft.** §11.15 found one output (pin 1) and two inputs
+> (pins 2/3); Digimatic wants two outputs and one input. But that conclusion carries the caveats
+> already documented here — driving a pin masks any device drive on it (§3.4: only 2 of 4 unmasked
+> cells have artifacts), and the 10 kΩ pull-ups are within ~2× of what these weak drivers can sink
+> (§5.7a), so a driven-but-weak pin could read as "held at the rail."
+>
+> **Corrected status: Digimatic is OPEN, and arguably the leading hypothesis** — not "largely
+> closed." This retraction stands on our own measurements; it does not depend on
+> `igaging_dataconnect_hardware_findings.md` (§11), which is desk research.
+
+The original (incorrect) argument is preserved below for the record.
+
+#### Original text — superseded
 
 The document's own discriminator table says:
 
@@ -948,8 +982,88 @@ Nothing in §§1–4 is weakened. Three things get stronger:
 - The "exhausted" claims (§3.1) get worse: two more never-varied stimulus parameters surface
   (20 % duty, §5.5a; 100 kΩ pull-ups, §5.7a) — both specified by the reference implementation, both
   never delivered by any test in this project.
-- The §11.13 Digimatic branch is largely closed by a measurement taken a month ago (§10.3),
-  which means `BRINGUP_PLAN.md`'s "try this first" banner is pointing at a dead end.
+- ~~The §11.13 Digimatic branch is largely closed by a measurement taken a month ago (§10.3).~~
+  **Retracted — see the banner on §10.3.** Digimatic is open and arguably favoured; the pin count
+  fits it and it resolves the §2.1 two-drivers contradiction.
 
 And one thing gets cheaper: F8 lets `igaging_decode.py` pin `SIGN_ENCODING = "twos"` now, and F9
 gives Phase C a two-way discrimination target instead of an open-ended fit.
+
+---
+
+## 11. Review of `igaging_dataconnect_hardware_findings.md` — hypothesis, not evidence
+
+**What it is:** desk research into who manufactures the DataConnect kits, arguing from vendor
+product photography that the 35-065 speaks Mitutoyo Digimatic. **Nothing in it was measured, it
+never touched this micrometer, and it was written with no knowledge of this project** — it has not
+seen `BENCH_LOG.md` and knows none of our pin roles, continuity results, or trigger conditions.
+Weight it accordingly: it is a well-argued hypothesis that generates one good experiment. It is not
+a finding, and it does not settle anything.
+
+### 11.1 Its chain of inference, and where each link is load-bearing
+
+1. iGaging = IPIC, a brander not a manufacturer → the "3rd party item" reply is literal. *Plausible
+   and low-stakes.*
+2. Both kits share the **same control box**; only the tool-end cable differs. *From product
+   photos. Our own §11.13 made the same observation and was appropriately careful about it:*
+   "we have NOT established the two control boxes are electrically identical — only that they look
+   alike."
+3. The box-end 2×5 connector is **the Mitutoyo Digimatic 10-pin standard** (1=GND, 2=DATA, 3=CLOCK,
+   4=RDY, 5=REQ). *The standard and its pinout are well corroborated; that these photos show that
+   connector is a visual identification.*
+4. ⇒ the box is a generic Digimatic wedge ⇒ **if the adapter cable is passive**, the mic emits
+   Digimatic. *The conditional is doing all the work, and the document concedes it — converter
+   electronics in the connector hood is exactly how ASDQMS SmartCables work.*
+5. **The button-count argument:** the box has one button (`DATA`). A Digimatic frame is
+   self-describing, so one button suffices; a raw-count tool would need zero and units buttons.
+   *This is the most interesting argument in the document — it reasons from a design constraint
+   rather than from a photo detail. But it still reads a protocol off a photograph of a housing.*
+
+### 11.2 The one thing worth acting on
+
+**§6 — ohm out the adapter cable.** If the `100-700-USB-MC` is ever bought, buzz all five
+micro-USB pins against all ten 2×5 pins *before* plugging anything in. Ten minutes, no power, no
+risk, nothing opened. Five clean 1:1 connections means the cable is passive, which both confirms
+Digimatic **and hands over the complete micro-USB pinout including which pin is REQ** — the single
+biggest unknown in the project. Opens or diode drops mean active electronics and the inference
+chain collapses. Either outcome is informative, which is what makes it a good experiment.
+
+This is now **step 0 of the cable session** (§8, step 14), ahead of the in-line sniff.
+
+Its §8 OEM leads (reverse-image the housing; look for the same box under Accusize / Dasqua /
+Shahe / Insize; ask MicroRidge or ASDQMS whether their Digimatic wedges work with a 35-065) are
+legitimate zero-cost research directions, though none produces a measurement.
+
+### 11.3 What it does *not* change
+
+- **It is not why Digimatic is back on the table.** That is §10.3's retraction, which rests on our
+  own data: three signal pins plus two grounds is exactly Digimatic's minimum with VDD unneeded,
+  and it resolves the §2.1 two-drivers contradiction. This document happens to agree; it is not the
+  evidence.
+- **It does not override §11.15/§11.16.** Our measured pin roles — one observed output, two inputs
+  — remain the strongest counter-evidence to Digimatic, subject to the masking and weak-driver
+  caveats already recorded (§3.4, §5.7a).
+- **Its §7 correction of the three-button claim is worth noting** — the "zero/units/readout"
+  description came from Alex Whittemore's blog about a cheaper, different micrometer and was
+  carried into our own investigation §8 without verification. That much is a real sourcing catch,
+  and it applies to our docs too.
+
+### 11.4 Bonus: an open question from §1.1 is now closed by our own data
+
+While checking this document's implications, the unexplained post-trigger structure on pin 1
+(§1.1's "time-varying ±0.7 V envelope … never explained") was resolved against the captures:
+
+| Capture | Injected clock | pin 1 toggle rate @ 0 V | ratio |
+|---|---|---|---|
+| `readingB` (clock on pin 3) | 8.40 kHz | 7.41 kHz | 0.883 |
+| `readingA_clk2` (clock on pin 2) | 8.48 kHz | 7.45 kHz | 0.879 |
+
+Near-identical ratios across two runs that used **different clock pins** means the activity tracks
+the injected clock — it is crosstalk, undersampled (an ~8.4 kHz signal at 20 kSa/s aliases exactly
+like this), **not** hidden device data. §1.1's conclusion is unaffected; that particular open thread
+is closed.
+
+One real observation survives: ~1.4 Vpp of crosstalk riding on a pin that is supposedly hard-driven
+low by a saturated NPN is anomalous — a saturated transistor should swamp it. That is further
+support for §5.7a's weak-driver concern and for §2.2's doubt about the "−0.7 V open-collector"
+characterisation.

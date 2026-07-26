@@ -20,8 +20,13 @@
 >   hard-grounded on this unit, so REQ cannot live there.
 > - **§10 open question 6 is answered:** the tool needs no external VDD.
 >
-> That last point cuts the other way too, and usefully: by **this document's own §3
-> discriminator** — ID pin at 0 Ω to GND ⇒ 21-bit family — this unit is **not** Digimatic.
+> ~~That last point cuts the other way too, and usefully: by **this document's own §3
+> discriminator** — ID pin at 0 Ω to GND ⇒ 21-bit family — this unit is **not** Digimatic.~~
+> **Retracted.** That inference used §5.1's "REQ lands on the ID pin," which follows from the F4
+> mapping *this same banner has just falsified* for this unit. **Digimatic remains open, and is
+> arguably the leading hypothesis**: the mic has three signal pins plus two grounds, which is
+> exactly Digimatic's minimum (REQ + CLK + DATA + GND) given it needs no VDD pin, and it explains
+> the board's two open-collector drivers. See `review.md` §10.3.
 >
 > Still fully applicable and acted upon: **F2** (not 5 V tolerant), **F5** (~100 kΩ pull-ups),
 > **F8** (two's complement), **F9** (counts-per-unit candidates), **§4.2** (20 % duty, idle LOW),

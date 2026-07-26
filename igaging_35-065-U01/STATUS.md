@@ -48,8 +48,28 @@ evidence is empirical.
 - Free-running / self-clocked output (passive listening, with and without pull-ups).
 - Pin 1 as a VDD input that powers the interface.
 - Clock **rate** as the missing factor — pin 1's response is identical from 10 Hz to 9 kHz.
-- **Digimatic/SPC** is now largely closed: the documented mapping puts REQ on pin 4 (ID), and
-  pin 4 is hard-grounded here. See `review.md` §10.3.
+
+## Leading open hypothesis: Mitutoyo Digimatic
+
+*(An earlier revision of this file listed Digimatic as ruled out. **That was an error** — it leaned
+on a generic pin mapping already known to be wrong for this unit. Retracted; see `review.md`
+§10.3.)*
+
+**For it:**
+- **The pin count fits exactly.** Digimatic minimally needs REQ + CLK + DATA + GND. This unit has
+  **three signal pins and two grounds**, and needs no VDD pin because it is self-powered (pin 1
+  drew 0.0 mA). Three signals is precisely the requirement.
+- **It resolves the two-drivers contradiction.** Q1/Q2 are two open-collector drivers but only one
+  output pin has been identified. Digimatic predicts exactly two device outputs: CK and DATA.
+- Desk research (`igaging_dataconnect_hardware_findings.md`) argues the same from the accessory
+  hardware — **but that is unmeasured third-party inference, not evidence.** See `review.md` §11.
+
+**Against it:**
+- §11.15 measured **one output (pin 1) and two inputs (pins 2/3)**; Digimatic wants two outputs and
+  one input. This is the strongest counter-evidence — but it is softer than it reads: driving a pin
+  masks any device drive on it (only 2 of 4 unmasked cells were captured), and the 10 kΩ pull-ups
+  used are within ~2× of what these weak drivers can sink, so a driven-but-weak pin could read as
+  "held at the rail." See `review.md` §3.4 and §5.7a.
 
 ## Not yet known
 
@@ -83,10 +103,15 @@ evidence is empirical.
 
 5. **8-channel logic analyzer (~$15)** first. It removes the 1000-point-screen-read limitation that
    has distorted every result to date, and it is the right instrument for step 6 anyway.
-6. **The `100-700-USB-MC` cable (~$70).** Sniff it **in-line**, so raw frames can be correlated
-   against the exact decimal string its HID keyboard types — that settles framing *and* the
-   counts-per-unit constant in one session. Dual-purpose: if the RE stalls, the cable *is* a
-   working data-capture solution.
+6. **The `100-700-USB-MC` cable (~$70).**
+   - **Step 0, before plugging anything in: ohm out the adapter cable.** Buzz all five micro-USB
+     pins against all ten pins of the box-end 2×5. Five clean 1:1 connections ⇒ the cable is
+     passive ⇒ **the complete micro-USB pinout falls out for free, including which pin is REQ.**
+     Opens or diode drops ⇒ active electronics in the hood. Ten minutes, no power, no risk, either
+     outcome informative.
+   - Then sniff it **in-line**, so raw frames can be correlated against the exact decimal string
+     its HID keyboard types — that settles framing *and* the counts-per-unit constant in one
+     session. Dual-purpose: if the RE stalls, the cable *is* a working data-capture solution.
 
 ### [needs board access] — LAST, and only as one batched session
 
@@ -140,6 +165,7 @@ for this — it controls for damage without revealing the protocol.
 | `STATUS.md` | This — current state and next steps |
 | `BENCH_LOG.md` | Chronological bench record (§11.1–§11.16) + remaining Phase B/C plans |
 | `igaging_protcol_research.md` | Protocol reference: candidate families, specs, sources |
+| `igaging_dataconnect_hardware_findings.md` | ⚠ **Unmeasured desk research**, written without knowledge of this project — a Digimatic hypothesis argued from vendor photos. Hypothesis, not evidence |
 | `review.md` | Audit of the above against the raw captures — read before trusting a conclusion |
 | `README.md` | What the device is |
 | `ARCHIVE/` | Retired docs, superseded but kept for provenance |

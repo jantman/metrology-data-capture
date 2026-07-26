@@ -448,27 +448,36 @@ New tooling this session: `psu_lib.py` (B&K 169x client), `pullup_passive_monito
 
 ### 11.13 NEW hypothesis — Mitutoyo Digimatic-style SPC (REQ-triggered, DEVICE-clocked)
 
-> ## ⚠ LARGELY CLOSED — and the test below never tested this hypothesis
+> ## ⚠ STILL OPEN — arguably the leading hypothesis. No results were ever recorded here.
 >
 > **No results were ever recorded for this section.** `req_capture.py` was run (artifacts:
 > `req_p1_scope.png`, `req_p2_frame_*`, `req_p3_frame_*`, `req_p3_scr_*`) but the outcome was
 > never written up. §11.15 cites this section as an established negative; that citation has no
-> supporting text here.
+> supporting text here. **That gap is still the main problem with this section.**
 >
-> **The hypothesis is now largely closed on this unit.** The documented iGaging/Digimatic micro-B
-> mapping puts **REQ on pin 4 (ID)** — `igaging_protcol_research.md` §5.1/§7 calls this "a decisive
-> discriminator you can check with a meter," and its §3 table reads *ID at 0 Ω to GND ⇒ 21-bit
-> family*. **That meter check was done on 2026-06-21**: §11.3 records pins 4 and 5 both hard-tied
-> to battery negative. So REQ cannot live on pin 4 here, and by the discriminator this is a 21-bit
-> family part, not Digimatic.
+> **Correction to an earlier banner.** A previous revision of this note claimed the hypothesis was
+> "largely closed" because the documented micro-B mapping puts REQ on pin 4 (ID) and §11.3 measured
+> pin 4 hard-grounded. **That was wrong and is retracted.** The pin-4 assignment comes from
+> `igaging_protcol_research.md`'s *generic* iGaging mapping — the same mapping that is already
+> falsified on this unit (it says pin 1 = VDD and pin 3 = tool-driven DATA; both wrong here). A
+> discredited mapping cannot rule out a protocol. See `review.md` §10.3.
 >
-> **The test below drove REQ on pins 1, 2 and 3 — never pin 4**, which is the only pin the mapping
-> places REQ on and where the test is impossible anyway. So it could not have confirmed or refuted
-> Digimatic either way.
+> **Our own data fits Digimatic well:**
+> - **Pin count is exact.** Digimatic minimally needs REQ + CLK + DATA + GND. This unit has three
+>   signal pins and two grounds, and needs no VDD pin — it is self-powered (pin 1 drew 0.0 mA,
+>   §11.12). REQ simply is not on pin 4; with pin 1 not being VDD, the generic mapping shifts.
+> - **It resolves the Q1/Q2 puzzle** raised below: two open-collector drivers but only one
+>   identified output pin is exactly what Digimatic predicts — Q1 and Q2 = the device's CK + DATA.
 >
-> One supporting argument here also needs re-examination rather than retirement: "two OC drivers
-> (Q1/Q2) = the device's CK + DATA." §11.15 found only **one** output pin. Where Q2 goes is still
-> unresolved and is answerable with a DMM on the already-open board.
+> **Against it:** §11.15 measured one output and two inputs, where Digimatic wants two outputs and
+> one input. That is the real counter-evidence — but it is softer than it reads (driving a pin
+> masks device drive on it, only 2 of 4 unmasked cells were captured, and the 10 kΩ pull-ups are
+> within ~2× of what these weak drivers can sink). See `review.md` §3.4, §5.7a.
+>
+> **Note on `igaging_dataconnect_hardware_findings.md`:** it argues for Digimatic from the
+> accessory hardware, but it is unmeasured desk research written with no knowledge of this project.
+> It is not why this hypothesis is open — our own pin count is. Its one actionable contribution is
+> to ohm out the adapter cable if it is ever bought (`review.md` §11.2).
 
 Before buying the adapter, one signaling **direction** we never tried. Prompted by an observation
 about iGaging's two adapters:
@@ -634,8 +643,16 @@ the data. This conclusively rules out the last hypothesis that pin 1 might itsel
 >
 > The records are identical **only after being crushed to one bit at a 1.5 V threshold.** The
 > post-trigger region carries a time-varying ±0.7 V envelope whose bin-by-bin pattern **differs
-> between the two readings** and was never analysed. (It may well be crosstalk from the injected
-> clock — ~0.2 × 3 V ≈ 0.6 V fits the historic coupling ratio — but that was never checked.)
+> between the two readings** and was never analysed.
+>
+> **That envelope has since been identified as clock crosstalk, not data** (checked 2026-07-26):
+> at a 0 V threshold pin 1 toggles at 7.41 kHz in `readingB` against an 8.40 kHz injected clock,
+> and 7.45 kHz in `readingA_clk2` against 8.48 kHz — ratios of 0.883 and 0.879 across two runs that
+> used **different clock pins**. Tracking the injected clock like that is crosstalk, undersampled
+> (an ~8.4 kHz signal at 20 kSa/s aliases exactly this way), not device data. The conclusion above
+> is unaffected; this particular loose end is closed. *One oddity remains: ~1.4 Vpp of crosstalk on
+> a pin supposedly hard-driven low by a saturated NPN, which should have swamped it — further
+> support for the weak-driver concern in `review.md` §5.7a.*
 >
 > **Two further limits on what this test could show:**
 > - **Resolution.** `xinc = 5.0E-5` → **50 µs/sample**, 1000 points. Against the documented 9 kHz
