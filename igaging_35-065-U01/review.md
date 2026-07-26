@@ -44,9 +44,12 @@ tiers:
    there is a concrete, cheap list of untried experiments in §5 below, several of which the docs
    themselves proposed and then never ran.
 
-There is also a serious unexamined hypothesis: **the port may have been damaged.** §11.8 records
-that every pin was driven at **>9.5 V** for an entire session against a 3 V part. That is never
-listed as a candidate explanation for "the port strobes but never shifts data."
+One event also goes unexamined throughout: **the >9.5 V over-drive session.** §11.8 records that
+every pin was driven at **>9.5 V** for an entire session against a 3 V part, and that is never
+listed anywhere as a candidate explanation for "the port strobes but never shifts data." It should
+be named — but on analysis it is **not** a likely explanation (§4): the injected current was ~6 mA,
+the board topology keeps pin 1 off the die entirely, and all three pins are demonstrably still
+functional *after* the over-drive. Treat it as due diligence, not a leading hypothesis.
 
 ---
 
@@ -389,44 +392,75 @@ session this argument was protecting.)
 
 ---
 
-## 4. The unexamined hypothesis: is the port damaged?
+## 4. Was the port damaged by the over-drive? — worth logging, but unlikely
+
+> **Revised 2026-07-26.** An earlier draft of this section called the damage hypothesis
+> "arguably the most important missing hypothesis" and suggested buying a second micrometer over
+> the official cable. **That was too strong.** Working through the board topology and the
+> post-over-drive evidence puts it well under 10 % — and under ~5 % for the specific damage that
+> would actually explain the current symptom. The section is kept because the event belongs in the
+> record and is worth ten minutes with a DMM, not because it is a leading explanation.
 
 §11.8 records:
 
 > a "3 V" clock was really **>9.5 V** at the pin (clipping the scope at every vertical scale) —
 > ~3× over the 3 V battery ceiling.
 
-For the whole of §11.7 (multiple hours: continuous clock on all three pins at five amplitudes each,
-burst runs, button runs), every connector pin was driven at ~10 V through a 1 kΩ resistor. Against
-a 3 V CMOS part that is roughly 6–9 mA of sustained clamp/diode current per pin — far above the
-"< 1 mA paranoid case" the safety section budgeted for.
-
+For the whole of §11.7 — multiple hours, continuous clock on all three pins at five amplitudes
+each, plus burst and button runs — every connector pin was driven from the AWG's ~10 V EMF.
 Additionally §11.11 records that the **read-head FPC retaining-clip tabs cracked off** during
-teardown, requiring a tape/glue repair.
+teardown, requiring a tape/glue repair. Neither event appears anywhere in the bench log as a
+candidate explanation for the current symptom ("the port acknowledges but never shifts data"), and
+both should at least be named.
 
-Neither event appears anywhere as a candidate explanation for the current symptom — *"the port
-acknowledges (strobes) but never shifts data."* That symptom is entirely consistent with a
-surviving MCU/LCD (both battery-powered, unexposed) and a damaged output stage or a damaged
-input receiver.
+### 4.1 Why it is nonetheless unlikely
 
-**This should be an explicit open hypothesis**, because it changes the recommended next step: if
-the port is damaged, buying the `100-700-USB-MC` cable will produce a confusing null result on
-*this* unit, and the money is better spent on a second micrometer (which also gives a
-known-good comparison unit — something the project has never had).
+**The current was inside normal absolute-max ratings.** The ~10 V EMF sat behind the AWG's 50 Ω
+source impedance plus the 1 kΩ series resistor. A pin clamping at rail + diode (~3.7 V) therefore
+saw **(10 − 3.7) / 1050 ≈ 6 mA**. Typical MCU absolute-max input clamp current is ±10–20 mA per
+pin. That is "don't do this," not a blowout. Latch-up generally needs an order of magnitude more,
+and would have announced itself as a hot part, a garbled LCD, or a flattened cell — none observed.
 
-**[amended — §10]** `igaging_protcol_research.md` F2 sharpens this considerably. It quotes the
-TouchDRO author warning that on *newer* iGaging encoders — unlike the older, forgiving ones —
-"grounding or connecting the data pin … to a low-impedance 'sink' can let the magic smoke out."
-This unit is a newer part, and §11.7 drove ~10 V through 1 kΩ into every pin for a session. The
-damage hypothesis is no longer speculative housekeeping; it has a named failure mode from the most
-authoritative community source.
+**The board topology shields the die.** Per §11.11 the output path is MCU GPIO → **330 kΩ** →
+MMBT3904 base, with the **collector** on the connector pin. So:
 
-Cheap partial checks, in order:
-1. Diode-test pins 1/2/3 to GND and to the internal rail with a DMM; compare the three. A blown
-   clamp shows up as a shorted or missing diode drop.
-2. Compare Q1 and Q2 in-circuit (base–emitter and collector–emitter drops). They are accessible.
-3. Note that the mic's LCD reading being correct proves nothing about the port — the docs
-   repeatedly use "mic reading correctly" as a health check for the *interface*, which it is not.
+- **Pin 1 does not connect to the MCU at all** — it lands on a 3904 collector, rated
+  V<sub>CEO</sub> = 40 V / V<sub>CBO</sub> = 60 V. Ten volts there is a non-event.
+- Only pins 2/3 reach MCU inputs, and those are the pins that took the ~6 mA.
+
+**Decisive: all three pins demonstrably still work — *after* the over-drive.** §11.14/§11.15 show
+that pins 2 and 3 still receive edges (either one triggers a response), that pin 1's output driver
+still pulls hard low, and that the MCU's port logic still evaluates the button-plus-edge condition
+correctly.
+
+For damage to be the blocker it would have to have spared the input receivers, spared the output
+driver, spared the trigger logic, and destroyed *only* the data-shifting function. Silicon damage
+is not that selective.
+
+The far simpler explanation — and the one consistent with every observation — is that **the port is
+healthy and is waiting for a timed handshake that has not been guessed.** That is exactly what a
+port designed to talk to exactly one proprietary cable looks like.
+
+### 4.2 What this changes
+
+- **Do not buy a second micrometer for this reason.** It is a diagnostic, not a solution: it
+  controls for damage without revealing the protocol. Revisit only if §4.3 turns up something odd.
+- **The `100-700-USB-MC` cable remains the recommended purchase** (§8). The risk of a confusing
+  null on a damaged unit is small, and the cable is dual-purpose — if the RE stalls it *is* a
+  working data-capture solution.
+- `igaging_protcol_research.md` **F2** ("grounding or connecting the data pin … to a low-impedance
+  'sink' can let the magic smoke out" on newer iGaging encoders) is a real warning worth heeding
+  going forward, but it describes hard-grounding a driven output, which is not what happened here.
+
+### 4.3 Cheap checks, worth doing while the board is open
+
+1. Diode-test pins 1/2/3 to GND and to the internal rail; compare the three against each other. A
+   blown clamp shows as a shorted or missing diode drop. **Asymmetry between pins 2 and 3 is the
+   thing to look for** — they are supposed to be symmetric inputs.
+2. Compare Q1 and Q2 in-circuit (base–emitter and collector–emitter drops).
+3. Keep in mind that "the mic reads correctly" tests the LCD and encoder, **not** the port — the
+   bench log repeatedly uses it as an interface health check, which it is not. The real port health
+   check is the §11.15 pin-1 response, and that one passes.
 
 ---
 
@@ -646,8 +680,8 @@ repo.
 4. Add supersede notes to `PROTOCOL_RESEARCH.md` (REQ, pull-down guidance, pin mapping) and to §2,
    §4, §8 of the investigation doc.
 5. Fix the §1 repeatability figure, or mark it unverified.
-6. Add "the port may have been damaged by the >9.5 V over-drive session (§11.8) and/or the FPC
-   repair (§11.11)" as an explicit open hypothesis.
+6. Record the >9.5 V over-drive (§11.8) and the FPC repair (§11.11) as named events with a
+   *low* assessed damage risk and the reasoning why (§4) — not as a leading hypothesis.
 
 **Bench work, in order (all cheap, none require a purchase):**
 7. DMM: ring Q1/Q2 collectors and the `J10–J81` matrix to connector pins 1/2/3 (§5.1); diode-test
@@ -675,8 +709,9 @@ repo.
     box is a USB HID keyboard, you can correlate each captured raw frame against the exact decimal
     string it types, which settles framing *and* the counts-per-unit constant in one session. The
     bench docs' "sniff the cable" plan never noted this.
-16. Consider a second micrometer instead if step 7 suggests damage (§4), since it doubles as a
-    known-good reference.
+16. A second micrometer is **not** recommended — it controls for damage without revealing the
+    protocol, and §4 puts the damage risk low. Reconsider only if step 7's diode tests come back
+    asymmetric between pins 2 and 3.
 
 ---
 
@@ -842,7 +877,9 @@ and to connector pins 1/2/3 is a DMM-only test** and now joins §5.1 at the top 
 
 Nothing in §§1–4 is weakened. Three things get stronger:
 
-- The damage hypothesis (§4) gains a named failure mode (F2).
+- The damage question (§4) gains a named failure mode from F2 — though on analysis F2 describes
+  hard-grounding a driven output, which is not what happened here, so §4 ends up *weaker*, not
+  stronger. See the revision banner on §4.
 - The "exhausted" claims (§3.1) get worse: two more never-varied stimulus parameters surface
   (20 % duty, §5.5a; 100 kΩ pull-ups, §5.7a) — both specified by the reference implementation, both
   never delivered by any test in this project.

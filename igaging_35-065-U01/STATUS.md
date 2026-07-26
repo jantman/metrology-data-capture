@@ -50,15 +50,45 @@ been decoded** and has never been observed on any pin.
 4. **Deliver the documented waveform**: 21-cycle burst, 9 kHz, **20 % duty** (22 µs high / 89 µs
    low), idle LOW, into pin 2 then pin 3, gated from pin 1's falling edge. No test has ever used
    anything but a 50 % square.
-5. If those fail: an **8-channel logic analyzer (~$15)** before the **$70 `100-700-USB-MC` cable**;
-   sniff the cable **in-line** so raw frames can be correlated against the decimal string its HID
-   keyboard types.
+5. **Buy the hardware — this is the recommended path, not a last resort.** An **8-channel logic
+   analyzer (~$15)** first; it removes the 1000-point-screen-read limitation that has distorted
+   every result to date and is the right instrument for step 6 anyway.
+6. **The `100-700-USB-MC` cable (~$70).** Sniff it **in-line**, so raw frames can be correlated
+   against the exact decimal string its HID keyboard types — that settles framing *and* the
+   counts-per-unit constant in one session. It is also dual-purpose: if the RE stalls, the cable
+   *is* a working data-capture solution.
 
-## Open risk
+> **Honest assessment of 3–4 vs 5–6.** Steps 1–2 are information-gathering and free; do them.
+> Steps 3–4 are the best remaining guesses, but a timed handshake has too many free parameters
+> (sequence, timing, which pin, duty, gating) to brute-force reliably from outside — call it
+> ~15–20 % combined. Steps 5–6 are the only path with a guaranteed outcome. Five bench sessions in,
+> ~$85 is cheap against the alternative.
 
-The port may have been **damaged**. §11.7 drove ~10 V into every pin for a session before the AWG
-High-Z bug was found, and the read-head FPC clip was broken during teardown. "The mic reads
-correctly" tests the LCD, not the port. See `review.md` §4.
+## Was the port damaged by the over-drive? — probably not
+
+§11.7 drove ~10 V into every pin for a session before the AWG High-Z bug was found (§11.8), and the
+read-head FPC clip broke during teardown (§11.11). Both are on the record. **Neither is a likely
+explanation for the current symptom**, for three reasons (full analysis in `review.md` §4):
+
+- **~6 mA.** The 10 V EMF sat behind 50 Ω + the 1 kΩ series resistor; a pin clamping at ~3.7 V saw
+  (10 − 3.7)/1050 ≈ 6 mA, inside the ±10–20 mA absolute-max clamp current typical of MCU inputs.
+  Latch-up needs roughly an order of magnitude more and would have been obvious.
+- **Topology.** The output path is MCU → 330 kΩ → MMBT3904 base, collector on the pin — so **pin 1
+  never touches the die**, and 10 V on a 3904 collector (V<sub>CEO</sub> 40 V) is a non-event.
+- **All three pins still work, measured *after* the over-drive** (§11.14/§11.15): pins 2/3 still
+  receive edges, pin 1's driver still pulls hard low, the trigger logic still evaluates correctly.
+  Damage would have to have spared all of that and killed only the data path.
+
+The simpler explanation, consistent with everything: **the port is healthy and is waiting for a
+timed handshake nobody has guessed.**
+
+Caveat worth keeping: "the mic reads correctly" tests the LCD and encoder, **not** the port. The
+real port health check is the §11.15 pin-1 response — and it passes.
+
+**Cheap confirmation while the board is open:** diode-test pins 1/2/3 to GND and to the rail and
+compare them; asymmetry between pins 2 and 3 is the thing to look for, since they should be
+symmetric inputs. A second micrometer is *not* worth buying for this — it controls for damage
+without revealing the protocol.
 
 ## Files
 
