@@ -724,8 +724,13 @@ DC-held on the other) + DATA button, watching pin 1:
 | pin 3 | pin 2 | low (0 V)  | strobe only |
 
 **pin 1 never shifts data** — across single-input, dual-input, either REQ polarity, either role
-assignment (pin 2/pin 3 are symmetric inputs), continuous clock 10 Hz–2 kHz. It is always the same
-clean ~10 ms "data-ready" low, and no serial measurement data appears on any connector pin.
+assignment (pin 2/pin 3 are symmetric inputs), continuous clock **10 Hz through 9 kHz**. It is
+always the same clean ~10 ms "data-ready" low, and no serial measurement data appears on any pin.
+
+**9 kHz specifically checked** (iGaging's documented native clock rate): single-input clocking
+pin 2 at 9 kHz, single-input clocking pin 3 at 9 kHz, and two-input (CLK pin 3 @ 9 kHz / REQ pin 2)
+— **all still just the strobe.** So the clock *rate* is confirmed NOT the missing factor; pin 1's
+response is rate-independent.
 
 **CONCLUSION — blind reverse-engineering has reached its limit on this unit.** The interface is fully
 mapped (pin 1 = output/data-ready strobe; pin 2, pin 3 = inputs; trigger = DATA button + edges on an
