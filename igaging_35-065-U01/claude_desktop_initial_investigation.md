@@ -684,3 +684,50 @@ own ESP32 front-end. Absent the cable, passive + injection RE has reached its li
 
 New tooling this session: `psu_lib.py` (B&K 169x client), `pullup_passive_monitor.py`,
 `pullup_clock_capture.py` (both drive the PSU and force-off on exit).
+
+### 11.13 NEW hypothesis — Mitutoyo Digimatic-style SPC (REQ-triggered, DEVICE-clocked)
+
+Before buying the adapter, one signaling **direction** we never tried. Prompted by an observation
+about iGaging's two adapters:
+
+- **`100-700-USB`** (SPC): control box with USB out + a **10-pin box-header input**, ships with a
+  cable that has a **Mitutoyo-style "Type C" Digimatic SPC** connector on the tool end and the
+  10-pin box plug on the other.
+- **`100-700-USB-MC`** (this mic's adapter): control box looks **visually identical**, ships with a
+  cable that has a **Micro-USB** tool end and the **same 10-pin box plug**.
+
+**Caveat (do not overstate):** we have NOT established the two control boxes are electrically
+identical — only that they look alike and their cables share the same box-end (10-pin) connector.
+The box could auto-detect, or the two cables could map signals differently. So "the Micro-USB port
+is Digimatic" is a **hypothesis**, not a fact.
+
+**But the REQ / device-clocked model is independently supported by our own evidence**, regardless
+of the cable inference. **Mitutoyo Digimatic SPC works opposite to the "host-clocked" premise we
+assumed all along:**
+
+| | Assumed (host-clocked) | Digimatic SPC |
+|---|---|---|
+| Clock source | **we** generate it | **the device** generates it |
+| Trigger | none / continuous | host asserts **REQ** (active-low) |
+| Data | device shifts on our clock | device clocks out ~52 bits (13 BCD nibbles) after REQ |
+
+The reader holds **pull-ups** on DATA/CK/REQ; the host pulls **REQ low**; the device then drives
+**both CK and DATA** (open-drain). This explains **every** prior negative:
+- Passive, even WITH pull-ups (§11.12 Test 1): no REQ asserted → device never transmits → silence.
+- Clock injection on every pin (§11.9–11.12): wrong direction — the device owns the clock.
+- Board has **two open-collector drivers** (Q1/Q2, §11.11) = the device's **CK + DATA** outputs
+  (a host-clocked slave wouldn't need two OC drivers).
+- Solid "VDD" on pin 1 drew **0.0 mA** (§11.12) → pins 1/2/3 are **signals**, not power.
+
+Also corrects the §11.4/§11.7 "21-bit host-clocked" premise, which likely conflated the raw
+capacitive-scale 2-wire interface (host-clocked, used by TouchDRO-style readers directly on the
+encoder) with the **SPC output** on this connector.
+
+**Test (`req_capture.py`):** pull **all three** signal pins UP to +3 V; drive ONE pin active-LOW
+(REQ) at ~20 Hz; watch the other two for the **device** pulling them low (its self-generated
+CK + DATA). Try each pin as REQ; slow the REQ rate (5–10 Hz) if needed to give the device more
+time low. `--capture` arms a falling-edge trigger on a watched pin to grab the actual device frame
+→ then Phase B decode. Wiring: PSU +3 V → 10 kΩ → each of pins 1/2/3; AWG → 1 kΩ → the REQ pin;
+grounds → pin 4. **If this reveals device-clocked data, injection RE succeeds with no adapter
+needed;** if silent across all three REQ pins + rates, the §11.12 conclusion stands (sniff the
+real cable).

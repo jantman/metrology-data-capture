@@ -22,6 +22,14 @@
 > real clock pattern, pin roles, and any init/handshake the cable's MCU does that we can't
 > reverse-guess. Then Phase B decode → ESP32 front-end. Until then, injection RE has hit its limit
 > on this unit.
+>
+> **BUT — try this first (see §11.13): the Mitutoyo Digimatic SPC hypothesis.** We only ever
+> assumed *host-clocked*; Digimatic SPC is the opposite — **host asserts REQ (active-low), the
+> DEVICE generates the clock + data.** We never asserted a REQ, which fits every negative (silence
+> without a trigger; two open-collector drivers = the device's CK+DATA; 0 mA on "VDD"). Test with
+> `req_capture.py`: pull all 3 pins up, pulse one LOW as REQ, watch the other two for the device
+> clocking out data. If it responds → decode, no adapter needed. (This is a hypothesis, not a
+> certainty — the shared adapter box-connector is only suggestive.)
 
 Execution plan for the next bench session. Goal: **make the mic talk and fully decode its
 21-bit clock/data protocol.** Passive reverse-engineering is exhausted (the device is
