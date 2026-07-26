@@ -738,6 +738,16 @@ response is rate-independent.
 measurement information — it is a pure fixed "data-ready" strobe**, not the data. This conclusively
 rules out the last hypothesis that pin 1 might itself encode the value (e.g., pulse-width/timing).
 
+**Both INPUT pins also checked unmasked at both readings (closes the "masking" loophole):** when we
+drive a pin as the clock we *mask* any data the mic might put on it, so we watched each input
+*unmasked* (clock the OTHER input) at 0.065 mm and 24.698 mm. Phase-invariant metric (does the pin
+ever get pulled HARD low = real open-collector data, vs the small 2.5–3.4 V crosstalk wiggle):
+**pin 2 unmasked → 0 % hard-low at both readings; pin 3 unmasked → 0 % hard-low at both readings.**
+Neither input is ever actively driven, and neither changes with the reading. **Conclusion: NO
+connector pin (pin 1 output, pin 2/pin 3 inputs) carries the measurement data under any stimulus,
+at either reading.** The data is only obtainable via the read handshake — definitively gated on the
+cable sniff (task #6).
+
 **CONCLUSION — blind reverse-engineering has reached its limit on this unit.** The interface is fully
 mapped (pin 1 = output/data-ready strobe; pin 2, pin 3 = inputs; trigger = DATA button + edges on an
 input), but the mic only shifts the actual reading in response to a specific **timed READ HANDSHAKE**
