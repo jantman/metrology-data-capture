@@ -712,6 +712,35 @@ shifted DATA. Also test whether pin 1's pattern tracks the **spindle reading** (
 fixed (→ pure strobe). If coordinated 2-input driving still yields no bits, the `100-700-USB-MC`
 cable sniff is the definitive decode reference.
 
+### 11.16 Two-input handshake — exhausted; blind decode is at its limit (2026-07-26)
+
+Drove BOTH inputs together (`two_input_capture.py`: AWG CH1 = CLK square on one input, CH2 = REQ
+DC-held on the other) + DATA button, watching pin 1:
+
+| CLK | REQ | REQ level | pin 1 result |
+|-----|-----|-----------|--------------|
+| pin 2 | pin 3 | low (0 V)  | strobe only (1 transition) |
+| pin 2 | pin 3 | high (3 V) | strobe only |
+| pin 3 | pin 2 | low (0 V)  | strobe only |
+
+**pin 1 never shifts data** — across single-input, dual-input, either REQ polarity, either role
+assignment (pin 2/pin 3 are symmetric inputs), continuous clock 10 Hz–2 kHz. It is always the same
+clean ~10 ms "data-ready" low, and no serial measurement data appears on any connector pin.
+
+**CONCLUSION — blind reverse-engineering has reached its limit on this unit.** The interface is fully
+mapped (pin 1 = output/data-ready strobe; pin 2, pin 3 = inputs; trigger = DATA button + edges on an
+input), but the mic only shifts the actual reading in response to a specific **timed READ HANDSHAKE**
+(what the official cable performs) that can't be reliably guessed. Remaining ideas (precisely
+sequenced pulse-REQ-then-burst-CLK, phase-locked dual drive, etc.) are low-odds shots in the dark.
+
+**To finish the decode → sniff the `100-700-USB-MC` cable (task #6):** capture the exact handshake it
+performs on these pins, reproduce it, and read pin 1. That turns everything mapped here into a
+working DIY ESP32 interface. Alternatively the cable simply works as-is for data capture.
+
+**Session net (2026-07-26):** total silence → a confirmed, working, button-gated interface with
+fully identified pin roles. Major progress; the remaining data decode is gated on obtaining the
+cable handshake as a reference.
+
 **Photo index** (`board_teardown/`): `PICT0001` exterior (TwinForCe/USB Mic); `PICT0011` full
 battery-side board; `PICT0022/0023/0028/0037` connector + jumper matrix + Q1/Q2 close-ups.
 
