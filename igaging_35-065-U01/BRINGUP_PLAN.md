@@ -13,14 +13,15 @@
 > 5555); DHO814 timebase mode is `:TIMebase:MODE MAIN`; **High-Z is `:OUTPut:LOAD INF`** —
 > the spelled-out `INFinity` mis-parses to a 1 Ω load and over-drives the pins (see §11.8).
 >
-> **NEW LEAD (see §11.11) — the outputs are OPEN-COLLECTOR.** Teardown photos (`board_teardown/`)
-> show Q1/Q2 = MMBT3904 NPN with 330 kΩ base resistors = open-collector data drivers. Those can
-> only pull LOW and float otherwise — they need an external **pull-UP** to read HIGH. Every test
-> so far used a pull-DOWN or none, which MASKS an open-collector output. **Next test: pull the
-> signal pins UP to +3 V (B&K bench supply via `psu_lib.py`) and watch for a line dipping low —**
-> passively while pressing DATA / moving the spindle (`pullup_passive_monitor.py`), then clocked
-> (`pullup_clock_capture.py`). This may also mean the mic is device-as-master (self-clocked), not
-> host-clocked. If pull-ups are still silent, sniff the genuine `100-700-USB-MC` cable.
+> **INJECTION EXHAUSTED — the open-collector pull-up tests were also negative (see §11.12).**
+> With pull-UPs in place (so open-collector outputs would be visible), the mic still never drives
+> any pin: passive (self-clock) negative; clock on every pin, continuous+burst, negative; solid
+> VDD on pin 1 drew 0 mA and changed nothing (retiring the "pin1 = VDD" hypothesis). The mic
+> reads correctly but ignores every open-loop stimulus. **DEFINITIVE NEXT STEP: get the official
+> iGaging `100-700-USB-MC` cable and scope its lines while it reads this mic** — that captures the
+> real clock pattern, pin roles, and any init/handshake the cable's MCU does that we can't
+> reverse-guess. Then Phase B decode → ESP32 front-end. Until then, injection RE has hit its limit
+> on this unit.
 
 Execution plan for the next bench session. Goal: **make the mic talk and fully decode its
 21-bit clock/data protocol.** Passive reverse-engineering is exhausted (the device is

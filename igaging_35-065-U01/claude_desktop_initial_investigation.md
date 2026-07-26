@@ -644,3 +644,43 @@ If pull-ups finally reveal a driven line → Phase B (framing/bit-order/sign) vi
 
 **Photo index** (`board_teardown/`): `PICT0001` exterior (TwinForCe/USB Mic); `PICT0011` full
 battery-side board; `PICT0022/0023/0028/0037` connector + jumper matrix + Q1/Q2 close-ups.
+
+### 11.12 Pull-up / open-collector tests — negative; injection EXHAUSTED (2026-07-26)
+
+Acted on the §11.11 open-collector hypothesis: supply a +3 V rail from the B&K 169x bench supply
+(`psu_lib.py`) and pull the signal pins UP (never down), so an open-collector output — which can
+only pull LOW — becomes visible. Mic alive and reading correctly throughout (FPC re-secured).
+
+- **TEST 1 — passive, all 3 pins pulled up** (`pullup_passive_monitor.py`), nothing injected,
+  pressing DATA + turning the spindle: every pin held at the 3 V rail, 0/466 samples dipped.
+  **No self-clocked OC output** → not device-as-master.
+- **TEST 2 — clock injected + pull-ups** (`pullup_clock_capture.py`, monitored 40 s while
+  pressing DATA + moving the spindle): clock on **each** of pins 1/2/3 in turn (the other two
+  pulled up and watched), **continuous** for all three and **burst** on pin 1 — every watched pin
+  stayed at the rail (VMIN floors ~2.6 V; a real OC bit would hit ~0.2 V). **No driven DATA.**
+- **Solid-VDD combination** (the one setup never tried: pin 1 wired DIRECTLY to +3 V = solid VDD,
+  clock on pin 2, pull-UP on pin 3 = DATA, watch pin 3): DATA held at the rail — **negative.**
+  Crucially, **pin 1 drew 0.0 mA** from the supply and nothing changed → **pin 1 is NOT a VDD
+  input that powers the interface** (retires the "unpowered interface" hypothesis from §11.7/11.11;
+  the data interface is internally powered from the CR2032, and pin 1 is just another signal/OC
+  pin). pin 1's apparent ±2 V swing was a **VMAX/VMIN peak-detector NOISE artifact** — with the
+  clock off, pin 1 VAVG was a rock-solid 3.013 V (connection good) while VMAX/VMIN still showed
+  4.29/1.79 from EMI peaks. **Lesson: trust VAVG for a DC level; VMAX/VMIN exaggerate noise.**
+
+**CONCLUSION — external stimulation is exhausted.** With the mic reading correctly, and with
+pull-ups in place so open-collector outputs *would* be visible: clock on every pin (continuous +
+burst), power/VDD on the pins (0 mA draw, no effect), DATA button pressed, spindle moving — **the
+mic never actively drives any connector pin.** This is a comprehensive negative, not a
+pin-identification gap. (Not literally every permutation was run — e.g. solid-VDD was only tried
+on pin 1, burst only on some clock positions — but the 0 mA VDD draw and the uniform silence make
+further permutations very low value.)
+
+**DEFINITIVE NEXT STEP — sniff the genuine host cable.** Obtain the official iGaging
+**`100-700-USB-MC`** cable, plug it into this mic, and scope its lines while it reads. That
+captures the real host behaviour we cannot reverse-guess: the exact clock pattern, the true pin
+roles, and any **init / wake / handshake** the cable's MCU performs (the most likely reason every
+open-loop stimulus is ignored). Once the real protocol is captured → Phase B decode → build our
+own ESP32 front-end. Absent the cable, passive + injection RE has reached its limit on this unit.
+
+New tooling this session: `psu_lib.py` (B&K 169x client), `pullup_passive_monitor.py`,
+`pullup_clock_capture.py` (both drive the PSU and force-off on exit).

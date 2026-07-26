@@ -38,6 +38,10 @@ def main():
     ap.add_argument("--ovp", type=float, default=3.6)
     ap.add_argument("--thresh", type=float, default=1.5,
                     help="DATA dipping below this (from ~3 V rail) = real driven bit")
+    ap.add_argument("--secs", type=float, default=0.0,
+                    help="if >0, keep the clock running and MONITOR the watch pins for this many "
+                         "seconds while you press DATA / move the spindle (catches a button-gated "
+                         "or motion-gated output)")
     ap.add_argument("--max-volts", type=float, default=3.0)
     args = ap.parse_args()
     if args.amp > args.max_volts:
@@ -61,16 +65,44 @@ def main():
             tag = f"pullup_clk_cont_p{args.clk_pin}"
         awg.output(True, ch=1)
         time.sleep(0.4)
+        watch_pins = [p for p in (1, 2, 3) if p != args.clk_pin]
         print(f"\n{args.mode} clock {args.freq:g} Hz, {args.amp:g} V on pin {args.clk_pin}; "
-              f"DATA pin {args.data_pin} pulled to {args.rail:g} V.")
+              f"watching pins {watch_pins} pulled to {args.rail:g} V.")
 
         win_ms = 4.0 if args.mode == "continuous" else args.period_ms * 2.5
         scope.write(":TRIGger:SWEep AUTO"); scope.write(":RUN")
         scope.write(f":TIMebase:MAIN:SCALe {win_ms / 1000.0 / 10.0}")
         time.sleep(1.0)
-        vpp = {ch: scope.measure_item(ch, "VPP") for ch in (1, 2, 3)}
-        vmin = {ch: scope.measure_item(ch, "VMIN") for ch in (1, 2, 3)}
-        vmax = {ch: scope.measure_item(ch, "VMAX") for ch in (1, 2, 3)}
+        watch_ch = [PIN_CHANS[p] for p in (1, 2, 3) if p != args.clk_pin]
+        if args.secs > 0:
+            # Monitor: keep clocking, track the LOWEST each watch pin reaches while the user
+            # presses DATA / moves the spindle (a button- or motion-gated OC output shows here).
+            print(f"\n>>> Clock running on pin {args.clk_pin}. PRESS DATA repeatedly + TURN THE "
+                  f"SPINDLE for ~{args.secs:.0f}s NOW. <<<\n")
+            floor = {c: 9.0 for c in watch_ch}
+            n = 0
+            t0 = time.time()
+            while time.time() - t0 < args.secs:
+                dip = False
+                for c in watch_ch:
+                    v = scope.measure_item(c, "VMIN")
+                    floor[c] = min(floor[c], v)
+                    if v < args.thresh:
+                        dip = True
+                n += 1
+                if dip or n % 10 == 0:
+                    print(f"  t={time.time()-t0:5.1f}s  " + " ".join(
+                        f"pin{p} VMIN={scope.measure_item(PIN_CHANS[p],'VMIN'):+.2f}"
+                        for p in (1, 2, 3) if p != args.clk_pin) +
+                        ("   <== DIP!" if dip else ""))
+            vmin = {ch: (floor[ch] if ch in floor else scope.measure_item(ch, "VMIN"))
+                    for ch in (1, 2, 3)}
+            vpp = {ch: scope.measure_item(ch, "VPP") for ch in (1, 2, 3)}
+            vmax = {ch: scope.measure_item(ch, "VMAX") for ch in (1, 2, 3)}
+        else:
+            vpp = {ch: scope.measure_item(ch, "VPP") for ch in (1, 2, 3)}
+            vmin = {ch: scope.measure_item(ch, "VMIN") for ch in (1, 2, 3)}
+            vmax = {ch: scope.measure_item(ch, "VMAX") for ch in (1, 2, 3)}
         os.makedirs(OUTDIR, exist_ok=True)
         for ch in (1, 2, 3, 4):
             pre, raw = scope.read_raw(ch)
@@ -90,19 +122,25 @@ def main():
     if clk_vpp < CLK_PRESENT_V:
         print(f"!!! CLOCK NOT PRESENT (VPP {clk_vpp:.2f}); check AWG CH1 on pin {args.clk_pin}.")
         return
-    dmin, dmax, dvpp = vmin[data_ch], vmax[data_ch], vpp[data_ch]
-    print(f"  DATA pin{args.data_pin}: VMAX={dmax:+.2f} VMIN={dmin:+.2f} VPP={dvpp:.2f} "
-          f"(rail {args.rail:g} V)")
+    # Report BOTH non-clock pins (whichever is pulled up is a DATA candidate). A real
+    # open-collector DATA line dips well below the rail (VMIN low) while VMAX stays ~rail.
+    hit = None
+    for p in (q for q in (1, 2, 3) if q != args.clk_pin):
+        pmin, pmax, pvpp = vmin[PIN_CHANS[p]], vmax[PIN_CHANS[p]], vpp[PIN_CHANS[p]]
+        real = pmin < args.thresh   # a dip below 1.5 V off the ~3 V rail can't be crosstalk
+        star = "  <== DATA (pulled LOW off rail)!" if real else "  (held at rail — crosstalk)"
+        print(f"  pin{p}: VMAX={pmax:+.2f} VMIN(min)={pmin:+.2f} VPP={pvpp:.2f}{star}")
+        if real:
+            hit = p
     print("\n==== RESULT ====")
-    if dmin < args.thresh and dvpp > 1.0:
-        print(f"*** DATA pin {args.data_pin} pulled LOW off the rail (VMIN {dmin:.2f} V) while "
-              f"clocking pin {args.clk_pin} -> REAL open-collector DATA! ***")
+    if hit:
+        print(f"*** pin {hit} pulled LOW off the rail while clocking pin {args.clk_pin} -> "
+              f"REAL open-collector DATA! CLK=pin{args.clk_pin}, DATA=pin{hit}. ***")
         print(f"Analyze: python analyze_capture.py {OUTDIR}/{tag} "
-              f"--clk-pin {args.clk_pin} --data-pin {args.data_pin}")
+              f"--clk-pin {args.clk_pin} --data-pin {hit}")
     else:
-        print(f"DATA held near the {args.rail:g} V rail (VMIN {dmin:.2f} V) -> no driven bits on "
-              f"pin {args.data_pin} with clk on pin {args.clk_pin}. Try other clk/data pins or "
-              f"--mode burst.")
+        print(f"Both watched pins held near the {args.rail:g} V rail -> no driven bits with clk "
+              f"on pin {args.clk_pin}. Rotate the clock pin, or try --mode burst.")
 
 
 if __name__ == "__main__":
