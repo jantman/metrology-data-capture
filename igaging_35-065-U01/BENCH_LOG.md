@@ -358,6 +358,36 @@ If pull-ups finally reveal a driven line → Phase B (framing/bit-order/sign) vi
 
 ### 11.12 Pull-up / open-collector tests — negative; injection EXHAUSTED (2026-07-26)
 
+> ## ⚠ RETRACTED — this section's central conclusion is a FALSE NEGATIVE
+>
+> **"The mic never actively drives any connector pin" is wrong.** §11.14/§11.15 — later the same
+> day — showed that a clock on pin 2 *or* pin 3 with the DATA button held makes **pin 1 drive
+> low**. That is *exactly* the Test 2 configuration below. Test 2 should have caught it.
+>
+> **Why it didn't** (diagnosed in `review.md` §1.3, not at the time): the monitoring method, not
+> the stimulus. `pullup_clock_capture.py` polls `:MEASure:ITEM? VMIN` in a Python loop over a
+> **4 ms** acquisition window; `pullup_passive_monitor.py` uses **10 ms** and logged 466 samples
+> in 40 s (~11.6 queries/s). Effective observation coverage is **~4–12 % of wall-clock time**. A
+> ~25 ms strobe firing once per button press is present ~2.5 % of the time, so the expected number
+> of detections in a 40 s run is well under one. **A null from this monitor is not evidence of
+> absence.** Every "monitored N seconds, no dip" result in §11.8, §11.10 and this section is
+> **inconclusive, not negative.**
+>
+> Note also that §11.14's explanation — that the DATA button was "the one interaction we'd never
+> combined with the pull-up rig" — is contradicted by this section's own text: the button *was*
+> pressed in both tests here.
+>
+> **Two further defects** found by audit:
+> - **All the capture files from Test 2 are 0 bytes** (`pullup_clk_cont_p{1,2,3}_ch*.bin`,
+>   `pullup_clk_burst_p1_ch*.bin`). Cause: `read_raw()` is called while the scope is still in
+>   `:RUN`; Rigol RAW readback needs `:STOP` first. The verdicts below came from live `:MEASure`
+>   only — there is no waveform artifact to re-examine.
+> - The pull-ups used were **10 kΩ**. The reference implementations specify **~100 kΩ**, and
+>   Q1/Q2's 330 kΩ base resistors cap the sink current at ≈0.7 mA against the 0.3 mA a 10 kΩ
+>   pull-up demands — roughly 2× margin. A weakly-driven pin could have been held near the rail.
+>
+> The "0.0 mA on pin 1" reasoning is also unsound as stated — see the inline note below.
+
 Acted on the §11.11 open-collector hypothesis: supply a +3 V rail from the B&K 169x bench supply
 (`psu_lib.py`) and pull the signal pins UP (never down), so an open-collector output — which can
 only pull LOW — becomes visible. Mic alive and reading correctly throughout (FPC re-secured).
@@ -372,7 +402,11 @@ only pull LOW — becomes visible. Mic alive and reading correctly throughout (F
 - **Solid-VDD combination** (the one setup never tried: pin 1 wired DIRECTLY to +3 V = solid VDD,
   clock on pin 2, pull-UP on pin 3 = DATA, watch pin 3): DATA held at the rail — **negative.**
   Crucially, **pin 1 drew 0.0 mA** from the supply and nothing changed → **pin 1 is NOT a VDD
-  input that powers the interface** (retires the "unpowered interface" hypothesis from §11.7/11.11;
+  input that powers the interface** — ⚠ *the inference is unsound: the same supply also sources
+  three 10 kΩ pull-ups (~0.9 mA), so the B&K's display resolution puts a floor under this reading,
+  and §11.8 correctly noted that a healthy CMOS input draws ~nA either way. "0.0 mA" cannot retire
+  the hypothesis. (§11.15 does retire it, properly: pin 1 is an output.)* — (retires the
+  "unpowered interface" hypothesis from §11.7/11.11;
   the data interface is internally powered from the CR2032, and pin 1 is just another signal/OC
   pin). pin 1's apparent ±2 V swing was a **VMAX/VMIN peak-detector NOISE artifact** — with the
   clock off, pin 1 VAVG was a rock-solid 3.013 V (connection good) while VMAX/VMIN still showed
@@ -397,6 +431,28 @@ New tooling this session: `psu_lib.py` (B&K 169x client), `pullup_passive_monito
 `pullup_clock_capture.py` (both drive the PSU and force-off on exit).
 
 ### 11.13 NEW hypothesis — Mitutoyo Digimatic-style SPC (REQ-triggered, DEVICE-clocked)
+
+> ## ⚠ LARGELY CLOSED — and the test below never tested this hypothesis
+>
+> **No results were ever recorded for this section.** `req_capture.py` was run (artifacts:
+> `req_p1_scope.png`, `req_p2_frame_*`, `req_p3_frame_*`, `req_p3_scr_*`) but the outcome was
+> never written up. §11.15 cites this section as an established negative; that citation has no
+> supporting text here.
+>
+> **The hypothesis is now largely closed on this unit.** The documented iGaging/Digimatic micro-B
+> mapping puts **REQ on pin 4 (ID)** — `igaging_protcol_research.md` §5.1/§7 calls this "a decisive
+> discriminator you can check with a meter," and its §3 table reads *ID at 0 Ω to GND ⇒ 21-bit
+> family*. **That meter check was done on 2026-06-21**: §11.3 records pins 4 and 5 both hard-tied
+> to battery negative. So REQ cannot live on pin 4 here, and by the discriminator this is a 21-bit
+> family part, not Digimatic.
+>
+> **The test below drove REQ on pins 1, 2 and 3 — never pin 4**, which is the only pin the mapping
+> places REQ on and where the test is impossible anyway. So it could not have confirmed or refuted
+> Digimatic either way.
+>
+> One supporting argument here also needs re-examination rather than retirement: "two OC drivers
+> (Q1/Q2) = the device's CK + DATA." §11.15 found only **one** output pin. Where Q2 goes is still
+> unresolved and is answerable with a DMM on the already-open board.
 
 Before buying the adapter, one signaling **direction** we never tried. Prompted by an observation
 about iGaging's two adapters:
@@ -446,8 +502,15 @@ real cable).
 ### 11.14 BREAKTHROUGH — the DATA button triggers a device response (2026-07-26)
 
 **After two-plus sessions of total silence, the mic finally drives a connector pin.** The
-trigger was the on-body **DATA button** — the one interaction we'd never combined with the
-pull-up rig.
+trigger was the on-body **DATA button** — ~~the one interaction we'd never combined with the
+pull-up rig~~.
+
+> **⚠ That attribution is wrong.** The button *was* combined with the pull-up rig — §11.12 Tests 1
+> and 2 both say "pressing DATA" explicitly, and Test 2's clock-on-pin-2/pin-3 runs are the very
+> configuration §11.15 shows works. What was new here was not the button; it was **catching** the
+> response. §11.12 monitored by polling `VMIN` over a 4–10 ms window at ~11 queries/s (~4–12 %
+> observation coverage) and missed a ~25 ms event, whereas this session armed a real trigger. See
+> the §11.12 banner and `review.md` §1.3.
 
 **Setup:** all three signal pins pulled UP to +3 V (bench PSU); AWG pulsing pin 3 at ~10–20 Hz
 active-low ("REQ", via 1 kΩ); scope watching pins 1 & 2; mic awake, reading. Then **press the
@@ -533,11 +596,45 @@ pin 2 at 9 kHz, single-input clocking pin 3 at 9 kHz, and two-input (CLK pin 3 @
 — **all still just the strobe.** So the clock *rate* is confirmed NOT the missing factor; pin 1's
 response is rate-independent.
 
-**Reading-dependence checked (decisive):** captured pin 1's strobe at **0.065 mm** vs **24.698 mm**
-(wildly different readings), 50 ms window, same button tap. The two pin-1 waveforms are
-**byte-for-byte IDENTICAL** (0/1000 samples differ; both a ~25 ms low, 1 edge). **pin 1 carries no
-measurement information — it is a pure fixed "data-ready" strobe**, not the data. This conclusively
-rules out the last hypothesis that pin 1 might itself encode the value (e.g., pulse-width/timing).
+**Reading-dependence checked (~~decisive~~ — see correction):** captured pin 1's strobe at
+**0.065 mm** vs **24.698 mm** (wildly different readings), 50 ms window, same button tap. ~~The two
+pin-1 waveforms are **byte-for-byte IDENTICAL** (0/1000 samples differ; both a ~25 ms low, 1
+edge).~~ **pin 1 carries no measurement information — it is a pure fixed "data-ready" strobe**, not
+the data. This conclusively rules out the last hypothesis that pin 1 might itself encode the value
+(e.g., pulse-width/timing).
+
+> ## ⚠ CORRECTION — "byte-for-byte identical" is false, and the test cannot support "conclusively"
+>
+> Re-analysis of the stored captures (`review.md` §1.1):
+>
+> | Comparison of `readingA_ch1` vs `readingB_ch1` | Result |
+> |---|---|
+> | Raw bytes differing | **931 / 1000** |
+> | Digitised at a 1.5 V threshold | 0 / 1000 |
+> | Digitised at a 0.5 V threshold | **155 / 1000** (121 vs 125 transitions) |
+> | Post-trigger V<sub>avg</sub> | −0.02 V (both) — **not** the "−0.7 V hard low" of §11.14 |
+> | Post-trigger RMS, 2.5 ms bins, A | 0.72 0.33 0.28 0.62 0.54 0.33 0.50 0.66 0.27 |
+> | Post-trigger RMS, 2.5 ms bins, B | 0.32 0.51 0.64 0.27 0.29 0.73 0.30 0.35 0.62 |
+>
+> The records are identical **only after being crushed to one bit at a 1.5 V threshold.** The
+> post-trigger region carries a time-varying ±0.7 V envelope whose bin-by-bin pattern **differs
+> between the two readings** and was never analysed. (It may well be crosstalk from the injected
+> clock — ~0.2 × 3 V ≈ 0.6 V fits the historic coupling ratio — but that was never checked.)
+>
+> **Two further limits on what this test could show:**
+> - **Resolution.** `xinc = 5.0E-5` → **50 µs/sample**, 1000 points. Against the documented 9 kHz
+>   clock (111 µs bit period) that is ~2.2 samples/bit, with nothing to spare. Anything faster is
+>   invisible. §11.14 said exactly this ("the bits, if any, are faster than the 1000-pt screen read
+>   resolves") two sections earlier.
+> - **The "~25 ms low" is a trigger artifact.** The low region is samples 501–999 — it begins at
+>   the trigger point (centre screen, offset 0) and **runs to the end of the record.** The pin is
+>   still low when acquisition stops. Same for §11.14's "stays low ≥1.6 ms" (half of a 3.2 ms
+>   window). **The end of the pin-1 event has never been observed**, so its true duration is
+>   unknown — and "~10 ms" (§11.14), "~10 ms" (§11.15) and "~25 ms" here are three inconsistent
+>   figures for the same event.
+>
+> What survives: pin 1's *coarse 1-bit envelope at 50 µs resolution* is the same at both readings.
+> That is worth knowing but is not "conclusively rules out."
 
 **Both INPUT pins also checked unmasked at both readings (closes the "masking" loophole):** when we
 drive a pin as the clock we *mask* any data the mic might put on it, so we watched each input
@@ -549,7 +646,16 @@ connector pin (pin 1 output, pin 2/pin 3 inputs) carries the measurement data un
 at either reading.** The data is only obtainable via the read handshake — definitively gated on the
 cable sniff (task #6).
 
-**CONCLUSION — blind reverse-engineering has reached its limit on this unit.** The interface is fully
+> **⚠ On "both INPUT pins checked unmasked at both readings":** only two of the four required cells
+> have surviving artifacts. `readingA_clk2` covers pin 3 unmasked at reading A (V<sub>min</sub>
+> +2.57 V) and `readingB` covers pin 2 unmasked at reading B (+2.48 V) — both genuinely 0 % hard-low.
+> But the `readingA` run **saved only channel 1**; its other channels were never written. The
+> conclusion is probably right; the document asserts more than the data carries. See also the
+> 10 kΩ-vs-100 kΩ pull-up caveat in the §11.12 banner — "not hard low" assumes the pull-up cannot
+> overpower the driver, which was never verified.
+
+**CONCLUSION — ~~blind reverse-engineering has reached its limit on this unit~~ (overstated —
+see banner below).** The interface is fully
 mapped (pin 1 = output/data-ready strobe; pin 2, pin 3 = inputs; trigger = DATA button + edges on an
 input), but the mic only shifts the actual reading in response to a specific **timed READ HANDSHAKE**
 (what the official cable performs) that can't be reliably guessed. Remaining ideas (precisely
@@ -562,6 +668,32 @@ working DIY ESP32 interface. Alternatively the cable simply works as-is for data
 **Session net (2026-07-26):** total silence → a confirmed, working, button-gated interface with
 fully identified pin roles. Major progress; the remaining data decode is gated on obtaining the
 cable handshake as a reference.
+
+> ## ⚠ "Exhausted" / "reached its limit" is overstated — concrete experiments remain
+>
+> This is the third section to declare a search space exhausted; the previous two (§11.8, §11.12)
+> were each overturned by a later section doing something outside the "exhausted" set. Still
+> untried, all cheap and none requiring a purchase (`review.md` §5, `STATUS.md`):
+>
+> - **Clock duty cycle has never been varied.** The reference 21-bit clock is **20 % duty**
+>   (22 µs high / 89 µs low, idle LOW). Every clock this project has produced was **50 %**:
+>   `Awg.square()` defaults to `duty=50` and `configure_burst()` never issues `DCYCle` at all, so
+>   even the burst trains were symmetric.
+> - **Burst on an *input* pin, with pull-ups and the button, has never been run.** Burst-with-
+>   pull-ups was only ever driven into **pin 1** — the pin later identified as the *output*.
+> - **Clocking gated from pin 1's falling edge** — i.e. treating pin 1 as DRDY and clocking
+>   *inside* the low window. Every test so far used a free-running clock asynchronous to the strobe.
+> - **The two-input matrix is 3 cells**, and the phase sweep §11.15 proposed was never built
+>   (`two_input_capture.py` holds REQ as a DC level and has no phase parameter).
+> - **Pull-ups at 100 kΩ**, and at the internal rail voltage — which is *still unmeasured* after
+>   two teardowns (open since §10 of the old investigation doc; measure across C4/C5).
+> - **Ring out Q1/Q2, the `J10–J81` matrix, and the DATA button contacts** to the connector pins.
+>   DMM-only, board already accessible, and it resolves the two-drivers/one-output contradiction.
+>
+> **Open risk not considered anywhere in this log:** the port may be **damaged**. §11.7 drove
+> ~10 V through 1 kΩ into every pin for a full session before the AWG High-Z bug was found (§11.8),
+> and the read-head FPC clip broke during teardown (§11.11). "The mic reads correctly" tests the
+> LCD, not the port. See `review.md` §4.
 
 **Photo index** (`board_teardown/`): `PICT0001` exterior (TwinForCe/USB Mic); `PICT0011` full
 battery-side board; `PICT0022/0023/0028/0037` connector + jumper matrix + Q1/Q2 close-ups.
