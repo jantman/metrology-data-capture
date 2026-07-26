@@ -174,6 +174,7 @@ def main():
                 log("    skipped\n")
                 continue
             val, unit = d.read_settled(expect_function=func)
+            UNIT = unit          # use the meter's own unit string ("Ω"), not a guess
             results[key] = val
             log(f"    => {fmt(val)}   (raw {val!r} {unit})\n")
 

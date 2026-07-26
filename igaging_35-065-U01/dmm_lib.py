@@ -21,6 +21,31 @@ import urllib.request
 
 DMM_URL = "http://owon-dmm.jasonantman.com:8080"
 
+# The API is asymmetric on purpose: /api/function takes a MODE name, while /api/measurement
+# reports the measured QUANTITY, which is not always the same string.
+#     set RESISTANCE -> reads back as "RES"      set VOLT_DC -> reads back as "VOLT"
+# A naive prefix check ("RESISTANCE"[:4] == "RESI") fails against "RES", so map explicitly and
+# fall back to a BIDIRECTIONAL prefix test for anything unmapped, rather than hard-failing on a
+# mode nobody has exercised yet.
+MEASURED_AS = {
+    "VOLT_DC": "VOLT", "VOLT_AC": "VOLT",
+    "CURR_DC": "CURR", "CURR_AC": "CURR",
+    "RESISTANCE": "RES",
+    "CAPACITANCE": "CAP",
+    "CONTINUITY": "CONT",
+    "TEMPERATURE": "TEMP",
+    "DIODE": "DIODE", "FREQ": "FREQ", "PERIOD": "PERIOD",
+}
+
+
+def function_matches(reported, expected):
+    """True if the meter's reported quantity corresponds to the requested mode."""
+    rep, exp = reported.upper(), expected.upper()
+    mapped = MEASURED_AS.get(exp)
+    if mapped:
+        return rep == mapped.upper()
+    return rep.startswith(exp) or exp.startswith(rep)
+
 
 class DMM:
     def __init__(self, base=DMM_URL, timeout=10):
@@ -71,7 +96,7 @@ class DMM:
         for _ in range(tries):
             m = self.measurement()
             val, unit = m["value"], m["unit"]
-            if expect_function and not m["function"].upper().startswith(expect_function[:4].upper()):
+            if expect_function and not function_matches(m["function"], expect_function):
                 raise RuntimeError(
                     f"meter is in {m['function']}, expected {expect_function} — set_function() first")
             if prev is not None and abs(val - prev) <= max(tol, abs(val) * tol):

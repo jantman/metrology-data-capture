@@ -1,77 +1,19 @@
 ========================================================================
-iGaging 35-065-U01 — closed-case diode test (battery OUT, via breakout)
-started 2026-07-26 15:23:52
+iGaging 35-065-U01 — closed-case port health check (resistance mode), battery OUT, via breakout
+started 2026-07-26 15:34:03
 ========================================================================
 DMM: OWON,XDM1041,24252418,V4.3.0,3
 
 *** Is the BATTERY OUT of the micrometer, and the breakout connected? ***
-    type 'yes' to continue: y
-meter set to DIODE mode (state: {'function': 'DIODE', 'rate': 'SLOW', 'auto_range': True, 'range': None})
+    type 'yes' to continue: yes
+meter set to RESISTANCE mode (state: {'function': 'RESISTANCE', 'rate': 'SLOW', 'auto_range': True, 'range': '500 ��'})
 
---- pin4->pin5 ---
+--- [1/19] pin4-pin5 ---
     RED   -> pin 4 (GND)
     BLACK -> pin 5 (GND)
-    (sanity: known short, should read ~0 / beep. If not, the breakout or leads are bad.)
+    (ground integrity: known short. Proves current goes out pin 4, through the board, back pin 5 — i.e. BOTH ground pins are really contacting. If this is open, everything after it is meaningless.)
     probes placed? [Enter to read / s to skip / q to quit] 
-    => 0.0003 V   (raw 0.0003242651 V)
 
---- GND->pin1 ---
-    RED   -> pin 4 (GND)
-    BLACK -> pin 1
-    (forward clamp, pin 1 (the mic's output))
-    probes placed? [Enter to read / s to skip / q to quit] 
-    => OL (open)   (raw 1000000000.0 V)
+[ERROR] RuntimeError: meter is in RES, expected RESISTANCE — set_function() first
 
---- GND->pin2 ---
-    RED   -> pin 4 (GND)
-    BLACK -> pin 2
-    (forward clamp, pin 2 (input))
-    probes placed? [Enter to read / s to skip / q to quit] 
-    => OL (open)   (raw 1000000000.0 V)
-
---- GND->pin3 ---
-    RED   -> pin 4 (GND)
-    BLACK -> pin 3
-    (forward clamp, pin 3 (input)  <-- compare with pin 2)
-    probes placed? [Enter to read / s to skip / q to quit] 
-    => OL (open)   (raw 1000000000.0 V)
-
---- pin1->GND ---
-    RED   -> pin 1
-    BLACK -> pin 4 (GND)
-    (reverse, pin 1 — expect high/OL)
-    probes placed? [Enter to read / s to skip / q to quit] 
-    => OL (open)   (raw 1000000000.0 V)
-
---- pin2->GND ---
-    RED   -> pin 2
-    BLACK -> pin 4 (GND)
-    (reverse, pin 2 — expect high/OL)
-    probes placed? [Enter to read / s to skip / q to quit] 
-    => OL (open)   (raw 1000000000.0 V)
-
---- pin3->GND ---
-    RED   -> pin 3
-    BLACK -> pin 4 (GND)
-    (reverse, pin 3 — expect high/OL)
-    probes placed? [Enter to read / s to skip / q to quit] 
-    => OL (open)   (raw 1000000000.0 V)
-
-
-==== RESULTS ====
-  pin4->pin5   0.0003 V
-  GND->pin1    OL (open)
-  GND->pin2    OL (open)
-  GND->pin3    OL (open)
-  pin1->GND    OL (open)
-  pin2->GND    OL (open)
-  pin3->GND    OL (open)
-
-==== VERDICT ====
-  pin2 vs pin3 forward drop: 1000000000.0000 V vs 1000000000.0000 V  (delta 0.0 mV)
-  MATCHED -> no asymmetry between the symmetric inputs; no evidence of over-drive damage on pins 2/3.
-  pin1 forward drop: OL (open)  (expected to DIFFER from pins 2/3 — it should land on a transistor collector, not an MCU pin)
-  NOTE: pin 1 reads like the inputs. That is unexpected and would undercut the inferred topology in review.md §5.1a — worth recording either way.
-  No near-shorts on pins 1/2/3 in either direction.
-
-finished 2026-07-26 15:25:53
+finished 2026-07-26 15:34:40
