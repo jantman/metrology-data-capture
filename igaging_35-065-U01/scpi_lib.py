@@ -100,16 +100,23 @@ class Scope(SCPI):
         self.write(f":CHANnel{ch}:DISPlay OFF")
 
     def arm_single(self, trig_ch, level, slope="POSitive", mdepth=1_000_000, tb_scale=0.01,
-                   sweep="NORMal"):
+                   sweep="NORMal", offset=0.0):
         # sweep=NORMal: only stops on a real trigger (use when the signal is guaranteed).
         # sweep=AUTO:   force-triggers if none arrives, so :SINGle always yields a window
         #               (use when the stimulus timing/alignment is uncertain — a captured
         #               window is then guaranteed and correctness is checked in analysis).
+        #
+        # offset: horizontal position, in SECONDS between the trigger point and screen centre.
+        # Default 0 puts the trigger at centre screen, so only half the record is post-trigger —
+        # which is why every capture of pin 1's strobe so far ran off the end of the record and
+        # its true length was never measured (review.md §1.2). Pass a POSITIVE offset of about
+        # 5 * tb_scale to move the trigger to the far left and make the record almost entirely
+        # post-trigger. The DHO814 screen is 10 divisions wide.
         self.write(":RUN")
         self.write(f":ACQuire:MDEPth {mdepth}")
         self.write(":TIMebase:MODE MAIN")  # DHO814: mode is :TIMebase:MODE, not :TIMebase:MAIN:MODE
         self.write(f":TIMebase:MAIN:SCALe {tb_scale}")
-        self.write(":TIMebase:MAIN:OFFSet 0")
+        self.write(f":TIMebase:MAIN:OFFSet {offset}")
         self.write(":TRIGger:MODE EDGE")
         self.write(f":TRIGger:EDGE:SOURce CHANnel{trig_ch}")
         self.write(f":TRIGger:EDGE:SLOPe {slope}")

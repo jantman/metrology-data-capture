@@ -32,7 +32,10 @@ SWING_MIN = 1.0          # V, minimum VPP to call a pin "driven"
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--clk-pin", type=int, default=2, choices=(1, 2, 3),
-                    help="which pin you believe the AWG is wired to")
+                    help="pin you believe AWG CH1 is wired to")
+    ap.add_argument("--clk2-pin", type=int, default=0, choices=(0, 1, 2, 3),
+                    help="pin you believe AWG CH2 is wired to (0 = CH2 not connected). With both "
+                         "channels wired, either input can be driven in software with no rewiring.")
     ap.add_argument("--freq", type=float, default=1000.0)
     ap.add_argument("--amp", type=float, default=3.0)
     ap.add_argument("--rail", type=float, default=3.0)
@@ -73,17 +76,36 @@ def main():
                     f"pull-up, or a bad breakout contact on that pin")
 
         # --- 3. which pin actually moves? --------------------------------------------
-        print(f"\n[3/4] AWG ON ({args.freq:g} Hz, 0->{args.amp:g} V) — exactly one pin should swing")
-        awg.square(args.freq, low=0.0, high=args.amp, ch=1)
-        awg.output(True, ch=1)
         scope.write(":TRIGger:SWEep AUTO"); scope.write(":RUN")
         scope.write(":TIMebase:MAIN:SCALe 0.0005")
-        time.sleep(1.0)
-        for p in (1, 2, 3):
-            vpp = scope.measure_item(PIN_CHANS[p], "VPP")
-            driven[p] = vpp
-            print(f"      pin {p}: VPP {vpp:5.2f} V   {'<== DRIVEN' if vpp >= SWING_MIN else ''}")
-        moving = [p for p, v in driven.items() if v >= SWING_MIN]
+
+        def swinging(tag):
+            time.sleep(1.0)
+            out = {}
+            for p in (1, 2, 3):
+                out[p] = scope.measure_item(PIN_CHANS[p], "VPP")
+            print("      " + tag + "  " +
+                  "  ".join(f"pin{p} {v:4.2f}" for p, v in out.items()))
+            return [p for p, v in out.items() if v >= SWING_MIN]
+
+        print(f"\n[3/4] AWG ON ({args.freq:g} Hz, 0->{args.amp:g} V) — exactly one pin per channel")
+        awg.square(args.freq, low=0.0, high=args.amp, ch=1)
+        awg.output(True, ch=1); awg.output(False, ch=2)
+        moving = swinging("CH1 only: ")
+        driven = {p: 0.0 for p in (1, 2, 3)}
+
+        if args.clk2_pin:
+            awg.square(args.freq, low=0.0, high=args.amp, ch=2)
+            awg.output(False, ch=1); awg.output(True, ch=2)
+            moving2 = swinging("CH2 only: ")
+            awg.output(False, ch=2); awg.output(True, ch=1)
+            if moving2 != [args.clk2_pin]:
+                problems.append(
+                    f"AWG CH2: expected only pin {args.clk2_pin} to swing, saw {moving2 or 'nothing'}"
+                    + ("  (is the CH2 lead or its 1k connected?)" if not moving2 else ""))
+            else:
+                print(f"      CH2 correctly drives pin {args.clk2_pin} only.")
+
         if moving != [args.clk_pin]:
             if not moving:
                 problems.append(
@@ -133,9 +155,8 @@ def main():
             print(f"  [X] {p}")
         print("\n  Fix the above before running threshold_sweep.py.")
         raise SystemExit(1)
-    print("  [OK] rail good, all three pull-ups present, exactly one pin driven, divider as")
-    print("       predicted. The rig is ready — run:")
-    print(f"           python threshold_sweep.py --clk-pin {args.clk_pin}")
+    print("  [OK] rail good, all three pull-ups present, each AWG channel drives its own pin,")
+    print("       divider as predicted. The rig is ready.")
 
 
 if __name__ == "__main__":
