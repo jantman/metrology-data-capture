@@ -12,6 +12,8 @@ Used to supply the +3 V open-collector pull-up rail for the iGaging data-port te
 Networking to the LAN host needs Bash `dangerouslyDisableSandbox`.
 """
 import json
+import time
+import urllib.error
 import urllib.request
 
 PSU_URL = "http://owon-dmm.jasonantman.com:8088"
@@ -22,16 +24,38 @@ class PSU:
         self.base = base.rstrip("/")
         self.timeout = timeout
 
+    def _request(self, req_or_url, tries=4, backoff=0.4):
+        """Issue a request, retrying transient server-side failures.
+
+        The service talks to the supply over a serial link, and an occasional 5xx or timeout
+        shows up when a request lands while it is mid-transaction — observed as a one-off
+        HTTP 500 on /api/output that succeeded immediately afterwards. Retrying a few times
+        keeps a blip from aborting a long unattended run. 4xx is NOT retried: that is a bad
+        request, and repeating it just hides the bug.
+        """
+        last = None
+        for attempt in range(tries):
+            try:
+                with urllib.request.urlopen(req_or_url, timeout=self.timeout) as r:
+                    return json.load(r)
+            except urllib.error.HTTPError as e:
+                if e.code < 500:
+                    raise
+                last = e
+            except (urllib.error.URLError, TimeoutError, OSError) as e:
+                last = e
+            if attempt < tries - 1:
+                time.sleep(backoff * (2 ** attempt))
+        raise RuntimeError(f"PSU request failed after {tries} attempts: {last}") from last
+
     def _get(self, path):
-        with urllib.request.urlopen(self.base + path, timeout=self.timeout) as r:
-            return json.load(r)
+        return self._request(self.base + path)
 
     def _post(self, path, payload):
         req = urllib.request.Request(
             self.base + path, data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=self.timeout) as r:
-            return json.load(r)
+        return self._request(req)
 
     def state(self):
         return self._get("/api/state")
@@ -58,7 +82,6 @@ class PSU:
         voltage collapsed -- that means a short / heavy load on the rail (check wiring before
         trusting any result). Returns the fresh state dict.
         """
-        import time
         self.output(False)
         self.set_current(ilim)          # cap current before any voltage is live
         self.set_voltage(volts)
