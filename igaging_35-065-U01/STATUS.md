@@ -35,9 +35,9 @@ evidence is empirical.
 | | |
 |---|---|
 | **Pins 4 and 5** | **GND** — both, tied together and to battery negative |
-| **Pin 1** | The mic's **only output**. Asserts a long (≥25 ms) LOW when triggered |
+| **Pin 1** | The mic's **only output**. Asserts a LOW of **≥25 ms** (true length still unmeasured) at **~0 V** — a saturated-NPN low, not the "−0.7 V" once reported (§11.18) |
 | **Pins 2 and 3** | **Inputs**, and symmetric — driving *either* works |
-| **Trigger** | **DATA button held** *AND* **edges on pin 2 or pin 3.** Both required |
+| **Trigger** | **The DATA button ALONE.** No clock, no input edges (§11.18 — corrects §11.15's "both required") |
 | **Supply** | Self-powered from the CR2032. **No rail on the connector**; pin 1 drew 0.0 mA when fed 3 V |
 | **Idle** | All three signal pins float (~−0.02 V); no internal pull-ups |
 | **Outputs** | Open-collector (Q1/Q2 = MMBT3904 + 330 kΩ base) → external pull-**ups** required |
@@ -49,6 +49,8 @@ evidence is empirical.
 ## Ruled out
 
 - Free-running / self-clocked output (passive listening, with and without pull-ups).
+- Any transmission on pins 2/3 during a button press: with **no clock at all**, both inputs
+  unmasked simultaneously for the first time, neither is ever pulled low (§11.18).
 - Pin 1 as a VDD input that powers the interface.
 - Clock **rate** as the missing factor — pin 1's response is identical from 10 Hz to 9 kHz.
 
@@ -90,17 +92,20 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
 1. ~~**DMM through the breakout, battery out:** port health check.~~ **DONE 2026-07-26**, both
    passes (`BENCH_LOG.md` §11.17/§11.17b). Damage ruled out; three separate signal nets confirmed;
    pins 4/5 verified interchangeable; pin 1 shown electrically distinct from pins 2/3.
-2. **Estimate the internal rail without opening the mic:** hold the DATA button, clock pin 2, and
-   **ramp the drive amplitude down** (3.0 → 2.5 → 2.0 → 1.5 → 1.2 → 1.0 → 0.8 V) until pin 1 stops
-   strobing. A CMOS input threshold sits near **0.5 × V<sub>DD</sub>**, so a cut-off near 1.5 V
-   implies a ~3 V rail and one near 0.8 V implies ~1.6 V. Then redo the key pull-up tests at the
-   implied rail and at **100 kΩ** (all prior work used a blanket 3 V / 10 kΩ — `review.md` §5.7a).
-3. **Capture the pin-1 event end to end** — trigger on its falling edge with the trigger at the
-   far left, long enough to catch the rising edge; then walk a µs-scale window through it.
-   Fix `read_raw` first (`:STOP` before reading — `review.md` §1.4).
-4. **Deliver the documented waveform**: 21-cycle burst, 9 kHz, **20 % duty** (22 µs high / 89 µs
-   low), idle LOW, into pin 2 then pin 3, gated from pin 1's falling edge. No test has ever used
-   anything but a 50 % square.
+2. **Capture the pin-1 strobe END — do this next.** Trigger on its falling edge with the trigger
+   at the far **left** of the record and a window long enough to catch the rising edge. Every
+   capture so far puts the trigger at centre screen, so the low always runs to the end of the
+   record and "~25 ms" is a floor, not a measurement (`review.md` §1.2). We need the real window
+   length before step 3 can be timed.
+3. **Clock a burst INSIDE the strobe window**, gated from pin 1's falling edge, at the documented
+   **20 % duty / 9 kHz** (22 µs high / 89 µs low, idle LOW). Every clocking attempt to date has
+   been free-running and *asynchronous* to the window. If pin 1 is a data-ready line, this is the
+   experiment that matters — **highest value remaining** (`review.md` §5.5a, §5.7).
+4. **~~Estimate the internal rail by sweeping the input threshold~~ — DOESN'T WORK.** Attempted
+   2026-07-26 and **void**: the response is not gated on the driven input at all, so ramping the
+   drive amplitude proves nothing (§11.18). The rail remains unmeasured; a genuine closed-case
+   method for it is still wanted. Separately, still worth doing: redo the key pull-up tests at
+   **100 kΩ** rather than 10 kΩ (`review.md` §5.7a).
 
 ### Purchases — recommended, not a last resort
 

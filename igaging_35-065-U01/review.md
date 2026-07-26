@@ -138,6 +138,13 @@ The real reason is a measurement-methodology defect, and it is never identified:
 pressing DATA, no dip" result in §11.8, §11.10 and §11.12 inherits this defect and should be
 downgraded from "negative" to "inconclusive."
 
+> **CONFIRMED — three times over (2026-07-26, `BENCH_LOG.md` §11.18).** This prediction has now
+> been borne out by direct measurement. With an armed trigger instead of the polling loop, the
+> **DATA button alone** makes pin 1 strobe for ≥25 ms, reproducibly 3/3, with nothing driven at
+> all. So the polling loop caused: (1) §11.12's "the mic never drives any pin", (2) §11.14's
+> mis-attribution of the breakthrough to the button being new, and (3) §11.15's "button AND input
+> edges are both required" — which is now retracted. Three false negatives, one root cause.
+
 `BRINGUP_PLAN.md`'s status banner still leads with the §11.12 conclusion verbatim ("the mic never
 actively drives any connector pin — only passive crosstalk, everywhere") — see §6.1.
 
@@ -215,6 +222,12 @@ ground; V<sub>CE(sat)</sub> is ≈ +0.1…+0.3 V. A −0.7 V level is a *forward
 ground* — which points at something quite different (a clamp/protection diode conducting, a ground
 offset between the scope reference and the PSU return, probe/instrument offset, or ringing
 undershoot).
+
+> **RESOLVED (2026-07-26, `BENCH_LOG.md` §11.18).** Measured directly on a clean button-alone
+> capture with nothing driven: the strobe's low region has a **median of −0.027 V**, with only
+> **4–5 of 495 samples** below −0.3 V. The low is **ground**, exactly as a saturated NPN should
+> give. "−0.7 V" was VMIN peak-detecting a handful of noise spikes. The sub-ground anomaly is
+> closed — and it persisted with the AWG disconnected, so it was never clock-related either.
 
 Independently, the verified post-trigger **V<sub>avg</sub> is −0.02 V, not −0.7 V** (§1.1 table).
 The −0.7 V figure comes from `VMIN`, a peak detector — the exact metric §11.12 itself warns about:

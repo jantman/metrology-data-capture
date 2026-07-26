@@ -574,6 +574,20 @@ pin-3 drive); (2) capture the **whole ~10 ms event** at high resolution with a *
 
 ### 11.15 Clock-sweep WITH the button — pin roles nailed down (2026-07-26)
 
+> ## ⚠ PARTLY RETRACTED — the trigger condition below is wrong (see §11.18)
+>
+> **"Both are required" is false. The DATA button ALONE triggers pin 1's strobe** — no clock, no
+> input edges. Confirmed 3/3 by direct capture with the AWG switched off (§11.18). The clock in
+> the table below was **incidental, not causal**.
+>
+> The error came from citing §11.12's button-alone result as an established negative. That run's
+> detection was the VMIN polling loop covering ~4–12 % of wall-clock time, so its null was never
+> evidence of absence — the third false negative from that same defect (`review.md` §1.3).
+>
+> **What still stands:** pin 1 is the mic's output and driving pin 1 itself does nothing; pins 2
+> and 3 are inputs. **What does not:** that input edges are required to trigger anything, and
+> the "−0.7 V" figure for pin 1's low, which §11.18 measures as ~−0.03 V (ground).
+
 Prompted by "have we clocked the *other* pins with the button?" — we'd only ever added the button
 to the pin-3 drive. Swept all three clock positions with all pins pulled up + the DATA button
 pressed, ~10 Hz AWG square on the driven pin:
@@ -825,6 +839,69 @@ seen well below its forward voltage, i.e. leakage only.
 symmetric inputs, pin 1 distinct as predicted. Combined with `review.md` §4's analysis (~6 mA
 injected, topology shielding, all three pins still functional), the >9.5 V over-drive should no
 longer be carried as a live explanation for anything.
+
+### 11.18 The DATA button ALONE triggers the strobe — §11.15 corrected (2026-07-26)
+
+Found by a **negative control** on the input-threshold sweep, then confirmed by direct capture.
+
+**How it surfaced.** The threshold sweep (`threshold_sweep.py`, estimating the internal rail by
+ramping the drive amplitude down until pin 1 stops responding) responded at *every* amplitude, all
+17 steps down to a 0.42 V pin high. Taken at face value that implied a rail below ~0.9 V. Then the
+negative control — **AWG output switched off entirely, button only** — also fired. **The sweep was
+therefore void**, and the control was the real result.
+
+**Confirmed by capture** (`button_only_capture.py`, 3/3 events, nothing driven, all three pins
+pulled up and watched simultaneously; `findings/button_only_2026-07-26_164614.txt`):
+
+| | event 1 | event 2 | event 3 |
+|---|---|---|---|
+| pin 1 longest low | **499 samp / 24.95 ms** | **499 / 24.95 ms** | **499 / 24.95 ms** |
+| pin 2 samples low | **0** | **0** | **0** |
+| pin 3 samples low | **0** | **0** | **0** |
+
+Quiet check before arming confirmed the AWG was off (all pins VPP ≤ 0.25 V).
+
+#### Three findings
+
+**1. The button alone is the whole trigger.** A sustained 25 ms low, reproducible 3/3 — not the
+mechanical/EMI press glitch §11.8 saw (that was 1–2 isolated samples; these are 499 consecutive).
+**§11.15's "(DATA button held) AND (edges on pin 2 or pin 3) — both are required" is WRONG** and
+is retracted. Its button-alone leg came from §11.12 Test 1, whose detection was the VMIN polling
+loop covering ~4–12 % of wall-clock time. **This is the THIRD false negative traced to that loop**
+(after §11.12's "mic never drives any pin" and the §11.14 mis-attribution), exactly as
+`review.md` §1.3 predicted. The clock in §11.15 was incidental, not causal.
+
+**2. Neither input is ever driven — the cleanest version of this test yet.** With no clock at all,
+**both** pins 2 and 3 were unmasked *simultaneously* for the first time; every previous check had a
+clock on one of them, masking it, and §11.16 only ever captured 2 of the 4 cells. Zero samples
+below 1.0 V on either input across all three events. **On a button press the mic drives pin 1 and
+nothing else** — no CK+DATA pair, so nothing Digimatic-shaped happens from the button on its own.
+(This does not refute Digimatic, which requires REQ to be asserted; it only shows the button by
+itself does not produce a frame.)
+
+**3. The "−0.7 V open-collector low" never existed.** Measured directly from the captures, the
+strobe's low region has a **median of −0.027 V and a mean of −0.03 V**, with only **4–5 of 495
+samples** below −0.3 V — isolated spikes. §11.14's "driven LOW — hard, to ~−0.7 V" was VMIN
+peak-detecting those spikes. The strobe low is **ground**, as a saturated NPN should give.
+`review.md` §2.2 argued exactly this and is now confirmed with clean data; the sub-ground anomaly
+is closed, and note it persisted with the AWG disconnected, so it was never clock-related either.
+
+#### Still open — and now the obvious next move
+
+The low run is again **499 of 1000 samples, starting at the trigger and running to the end of the
+record**. So 24.95 ms remains a **floor, not a measurement** — `review.md` §1.2's point stands and
+**the end of the pin-1 event has still never been observed.**
+
+That matters more than it used to. The simplest reading of all this is that **pin 1 is a
+"data-ready" / "request-to-send" line**: press DATA, the mic asserts a long window, and waits for
+the host to clock it. Every clocking attempt in this project has driven a free-running clock
+*asynchronous* to that window. So:
+
+1. **Capture the strobe's end** — trigger on pin 1 falling with the trigger at the far LEFT of the
+   record, window long enough to catch the rising edge. Gives the true window length.
+2. **Then clock a burst INSIDE that window**, gated from pin 1's falling edge, at the documented
+   20 % duty / 9 kHz (`review.md` §5.5a, §5.7). This is the highest-value untested experiment in
+   the project and both steps are closed-case on the existing rig.
 
 ---
 
