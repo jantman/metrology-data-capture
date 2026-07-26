@@ -1,0 +1,17 @@
+input-threshold sweep, clk pin 2 @ 1000 Hz, pull-ups 3 V
+2026-07-26_163815
+
+commanded  pin_high  vpp   result
+  3.00 V    3.00 V   2.97  RESPONDED
+  2.50 V    2.55 V   2.42  RESPONDED
+  2.00 V    2.09 V   1.92  RESPONDED
+  1.60 V    1.72 V   1.60  RESPONDED
+  1.40 V    1.54 V   1.42  RESPONDED
+  1.20 V    1.37 V   1.21  RESPONDED
+  1.00 V    1.19 V   1.02  RESPONDED
+  0.90 V    1.09 V   0.97  RESPONDED
+  0.80 V    1.01 V   0.90  RESPONDED
+  0.70 V    0.91 V   0.69  RESPONDED
+  0.60 V    0.83 V   0.73  RESPONDED
+
+control re-test at 3.00 V: RESPONDED

@@ -47,7 +47,12 @@ from psu_lib import PSU
 from clock_injection import PIN_CHANS
 
 OUTDIR = "findings"
-DEFAULT_AMPS = [3.0, 2.5, 2.0, 1.6, 1.4, 1.2, 1.0, 0.9, 0.8, 0.7, 0.6]
+# Extends well below the first sweep's 0.6 V floor. NOTE the hard limit: the 10k pull-up holds
+# the driven pin's LOW at rail/11 ~= 0.27 V, so pin_high can never go below that and the swing
+# collapses as the command approaches 0. If the threshold is not bracketed by ~0.15 V commanded,
+# the pull-up on the driven pin has to come off to get a true 0->amp swing (see the verdict).
+DEFAULT_AMPS = [3.0, 2.5, 2.0, 1.6, 1.4, 1.2, 1.0, 0.9, 0.8, 0.7, 0.6,
+                0.5, 0.4, 0.3, 0.25, 0.2, 0.15]
 
 
 def pin_high_level(scope, ch):
@@ -139,6 +144,7 @@ def main():
 
     rows = []
     control = None
+    neg_control = None
     try:
         psu.bring_up(args.rail, args.ilim, ovp=args.ovp)
         awg.square(args.freq, low=0.0, high=amps[0], ch=1)
@@ -157,8 +163,21 @@ def main():
                 print("  (two consecutive non-responses — stopping the descent)")
                 break
 
-        print("\n--- CONTROL: back to the starting amplitude ---")
+        print("\n--- POSITIVE CONTROL: back to the starting amplitude ---")
         control, _, _ = try_amplitude(scope, awg, args, amps[0], clk_ch, data_ch, label="CONTROL ")
+
+        # NEGATIVE CONTROL — the one that decides whether any of the above means anything.
+        # If pin 1 still strobes with NO clock at all, then the response is not gated on the
+        # driven input and the whole sweep measures nothing about an input threshold.
+        print("\n--- NEGATIVE CONTROL: AWG OFF, button only ---")
+        awg.output(False, ch=1)
+        time.sleep(0.5)
+        scope.arm_single(trig_ch=data_ch, level=args.thresh, slope="NEGative",
+                         mdepth=10_000, tb_scale=args.cap_tb_us / 1e6, sweep="NORMal")
+        print(f"  NEGCTRL clock OFF — KEEP TAPPING for {args.window:.0f}s. Expected: NO response.",
+              flush=True)
+        neg_control = scope.wait_stop(timeout=args.window) == "STOP"
+        print(f"     -> {'RESPONDED (!!)' if neg_control else 'no response (as expected)'}")
     finally:
         try:
             awg.output(False, ch=1)
@@ -174,7 +193,14 @@ def main():
         print(f"  {amp:>6.2f} V  | {high:>10.2f} V      | {mark}")
 
     print("\n==== VERDICT ====")
-    if control is not True:
+    if neg_control is True:
+        print("  *** NEGATIVE CONTROL FAILED — pin 1 strobed with the clock switched OFF. ***")
+        print("      The response is NOT gated on the driven input, so this sweep measures")
+        print("      nothing about an input threshold and every 'RESPONDED' above is suspect.")
+        print("      It also contradicts §11.12/§11.15, where the button alone did nothing —")
+        print("      so something in the rig or the trigger condition has changed. Investigate")
+        print("      before drawing any conclusion. THE RUN IS VOID.")
+    elif control is not True:
         print("  *** CONTROL FAILED — the mic did not respond at the starting amplitude on the")
         print("      re-test. It may have slept, the button may not have been pressed, or the rig")
         print("      moved. THE WHOLE RUN IS VOID. Wake the mic and re-run. ***")
@@ -196,8 +222,22 @@ def main():
             else:
                 print("  => consistent with a ~3 V rail; the 3 V pull-up rail was appropriate.")
         elif good and not bad:
-            print(f"  Responded at every amplitude down to {min(good):.2f} V — threshold is BELOW")
-            print("  the range swept. Re-run with lower --amplitudes to find the floor.")
+            floor = args.rail / 11.0
+            print(f"  Responded at EVERY amplitude, down to a measured pin high of "
+                  f"{min(good):.2f} V.")
+            print(f"  => the input threshold is BELOW {min(good):.2f} V, so at ~0.5 x VDD the "
+                  f"internal rail is below ~{2 * min(good):.1f} V.")
+            print(f"  That already means the mic is NOT a 3 V-logic part, and the blanket 3 V")
+            print(f"  pull-up rail used in every test to date has been ABOVE its own rail.")
+            if min(good) - floor < 0.25:
+                print(f"\n  *** FLOOR REACHED: the 10k pull-up pins the driven pin's LOW at")
+                print(f"      rail/11 = {floor:.2f} V, so the swing has collapsed to "
+                      f"{min(good) - floor:.2f} V and going lower is meaningless.")
+                print(f"      To push further, REMOVE THE 10k PULL-UP FROM PIN {args.clk_pin} ONLY")
+                print(f"      (leave pins 1 and 3 pulled up) for a true 0->amp swing, and re-run.")
+            else:
+                print(f"  Re-run with lower --amplitudes to bracket it "
+                      f"(floor is {floor:.2f} V — see the note on DEFAULT_AMPS).")
         else:
             print("  No clean transition found; results inconsistent. Re-run.")
 
@@ -211,8 +251,11 @@ def main():
         for amp, responded, vpp, high in rows:
             f.write(f"{amp:>6.2f} V  {high:>6.2f} V  {vpp:5.2f}  "
                     f"{ {True:'RESPONDED', False:'no', None:'VOID'}[responded] }\n")
-        f.write(f"\ncontrol re-test at {amps[0]:.2f} V: "
+        f.write(f"\npositive control (re-test at {amps[0]:.2f} V): "
                 f"{ {True:'RESPONDED', False:'NO — RUN VOID', None:'VOID'}[control] }\n")
+        f.write(f"negative control (AWG OFF, button only): "
+                f"{ {True:'RESPONDED — RUN VOID', False:'no response (expected)',
+                     None:'not run'}[neg_control] }\n")
     print(f"\nsaved -> {path}")
 
 
