@@ -42,6 +42,9 @@ evidence is empirical.
 | **Idle** | All three signal pins float (~−0.02 V); no internal pull-ups |
 | **Outputs** | Open-collector (Q1/Q2 = MMBT3904 + 330 kΩ base) → external pull-**ups** required |
 | **Board** | `MD311-4.1A`, shared multi-SKU board with a `J10–J81` jumper matrix. MCU is an unreachable COB blob |
+| **Separate nets** | Pins 1, 2, 3 are three **genuinely independent** nets — every pin-to-pin pair open both ways (§11.17b) |
+| **Pins 4 ≡ 5** | Interchangeable as ground references — cross-checked at measurement level, not just continuity (§11.17b) |
+| **Pin 1 ≠ pins 2/3** | Measured: pins 2/3 show ~30 MΩ to ground, pin 1 reads open. First electrical support for the inferred topology (§11.17b) |
 
 ## Ruled out
 
@@ -84,10 +87,9 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
 
 ### [closed-case] — do all of these first
 
-1. ~~**DMM through the breakout, battery out:** diode-test pins 1/2/3 to GND.~~ **DONE
-   2026-07-26** — all open; shorted clamps ruled out, symmetry comparison did not run
-   (`BENCH_LOG.md` §11.17). **Remaining half:** `python diode_test.py --mode resistance` to catch a
-   leaky path that diode mode reports as OL.
+1. ~~**DMM through the breakout, battery out:** port health check.~~ **DONE 2026-07-26**, both
+   passes (`BENCH_LOG.md` §11.17/§11.17b). Damage ruled out; three separate signal nets confirmed;
+   pins 4/5 verified interchangeable; pin 1 shown electrically distinct from pins 2/3.
 2. **Estimate the internal rail without opening the mic:** hold the DATA button, clock pin 2, and
    **ramp the drive amplitude down** (3.0 → 2.5 → 2.0 → 1.5 → 1.2 → 1.0 → 0.8 V) until pin 1 stops
    strobing. A CMOS input threshold sits near **0.5 × V<sub>DD</sub>**, so a cut-off near 1.5 V
@@ -130,39 +132,35 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
 > alternative. Step 7 is individually the highest-information work in the project but is gated
 > behind a re-open that risks the unit — which is exactly why it now sits last rather than first.
 
-## Was the port damaged by the over-drive? — probably not
+## Was the port damaged by the over-drive? — NO (closed to a low residual)
 
 §11.7 drove ~10 V into every pin for a session before the AWG High-Z bug was found (§11.8), and the
-read-head FPC clip broke during teardown (§11.11). Both are on the record. **Neither is a likely
-explanation for the current symptom**, for three reasons (full analysis in `review.md` §4):
+read-head FPC clip broke during teardown (§11.11). Both are on the record. **Neither is a live
+explanation for anything**, on four independent grounds:
 
+- **Measured, 2026-07-26 (§11.17b):** pins 2 and 3 — supposedly symmetric inputs — show
+  **30.140 MΩ and 29.999 MΩ** to ground, a **0.47 % match**, each reproducing to within 0.05 %
+  across both ground references. Damaged inputs do not track each other that closely. No shorts on
+  any pin in any direction.
 - **~6 mA.** The 10 V EMF sat behind 50 Ω + the 1 kΩ series resistor; a pin clamping at ~3.7 V saw
   (10 − 3.7)/1050 ≈ 6 mA, inside the ±10–20 mA absolute-max clamp current typical of MCU inputs.
   Latch-up needs roughly an order of magnitude more and would have been obvious.
 - **Topology** *(inference — see the access constraints above)*. The output path appears to be
   MCU → 330 kΩ → MMBT3904 base with the collector on the pin, which would mean **pin 1 never
-  touches the die**; 10 V on a 3904 collector (V<sub>CEO</sub> 40 V) is a non-event. Read off the
-  battery side only; the routing through the hidden side is not traced.
+  touches the die**; 10 V on a 3904 collector (V<sub>CEO</sub> 40 V) is a non-event. §11.17b now
+  gives this *some* electrical support: pin 1 really does behave as a different kind of node from
+  pins 2/3.
 - **All three pins still work, measured *after* the over-drive** (§11.14/§11.15): pins 2/3 still
   receive edges, pin 1's driver still pulls hard low, the trigger logic still evaluates correctly.
-  Damage would have to have spared all of that and killed only the data path.
 
-The simpler explanation, consistent with everything: **the port is healthy and is waiting for a
+The simple explanation, consistent with everything: **the port is healthy and is waiting for a
 timed handshake nobody has guessed.**
 
 Caveat worth keeping: "the mic reads correctly" tests the LCD and encoder, **not** the port. The
 real port health check is the §11.15 pin-1 response — and it passes.
 
-**Checked 2026-07-26 (closed-case diode test, `BENCH_LOG.md` §11.17) — partial:** every signal pin
-read **OL (open)** to ground in both directions, with the pin 4↔pin 5 sanity short confirming good
-leads. That **rules out a clamp fused short** — the common over-voltage failure mode — on all three
-pins. But with everything open there was no working-clamp baseline, so the intended pin-2-vs-pin-3
-symmetry comparison never ran, and the test cannot distinguish healthy protection from destroyed
-protection. **Still to do:** `python diode_test.py --mode resistance`, which measures into the MΩ
-range and can see a leaky path that reads OL in diode mode.
-
-A second micrometer is *not* worth buying for this — it controls for damage without revealing the
-protocol.
+A second micrometer is *not* worth buying: it controls for damage, and damage is no longer the
+question.
 
 ## Files
 

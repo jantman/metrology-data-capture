@@ -781,6 +781,51 @@ land straight on MCU inputs," which is one of the §5.1a inferences.
 the diode-test compliance voltage, and can therefore see a partial or leaky path that reads OL
 here. That would also give the pin-2-vs-pin-3 comparison an actual number to work with.
 
+#### 11.17b Resistance-mode pass — the comparison ran, and it passes (2026-07-26)
+
+Re-run in resistance mode, expanded to 19 placements: both ground references (not just pin 4),
+and — for the first time ever — **the signal pins against each other**.
+
+| Placement | via pin 4 | via pin 5 |
+|---|---|---|
+| GND → pin 1 | **OL** | **OL** |
+| GND → pin 2 | **30.140 MΩ** | **30.136 MΩ** |
+| GND → pin 3 | **29.999 MΩ** | **30.015 MΩ** |
+| pin 1/2/3 → GND (reverse) | OL | OL |
+| pin 4 ↔ pin 5 | 0.3818 Ω | — |
+| pin 1↔2, pin 1↔3, **pin 2↔3** | **OL both directions** | |
+
+**1. The three signal pins are genuinely separate nets.** Every pin-to-pin pair reads open in
+both directions. So §11.15's "pins 2 and 3 are symmetric inputs, driving either works" is *not*
+an artefact of them being one net, and **the three-signal-pin count that the Digimatic argument
+rests on (`review.md` §10.3) survives.** This needed checking and had never been checked.
+
+**2. Pins 2 and 3 match to 0.47 %.** 30.140 vs 29.999 MΩ — and each agrees with itself across the
+two ground references to within 0.05 %. This is the symmetry baseline the diode pass could not
+produce. Two independent pins tracking each other that closely is **not** what a damaged input
+looks like. The damage question is now substantively answered, not merely "no shorts."
+
+**3. Pin 1 is electrically distinct from pins 2/3 — measured, not inferred.** It reads OL in every
+direction against both grounds while the inputs conduct ~30 MΩ. Same leads, same meter, same range,
+same session, so **pin 1 acts as the internal control**: the 30 MΩ is a real property of pins 2/3,
+not instrument leakage or flux residue. This is the first *independent electrical* support for
+§5.1a's inferred topology (pin 1 on a transistor collector; pins 2/3 on input-like structures).
+It does not confirm the specific MMBT3904 arrangement — only that pin 1 is a different kind of node.
+
+**4. Pins 4 and 5 are interchangeable — verified, not assumed.** The two references agree to
+<0.1 % on every measurement that produced a number. Prior sections took this from §11.3's
+continuity check; it is now cross-checked at measurement level.
+
+**Why diode mode saw nothing:** a ~30 MΩ path needs ~30 kV to pass the meter's ~1 mA diode-test
+current, so it correctly reads OL there. The directionality (conducts GND→pin, not pin→GND) says
+the path is a junction rather than a plain resistor — consistent with a standard lower ESD clamp
+seen well below its forward voltage, i.e. leakage only.
+
+**Status of the damage hypothesis: closed to a low residual.** No shorts, no asymmetry between the
+symmetric inputs, pin 1 distinct as predicted. Combined with `review.md` §4's analysis (~6 mA
+injected, topology shielding, all three pins still functional), the >9.5 V over-drive should no
+longer be carried as a live explanation for anything.
+
 ---
 
 ## Remaining phases (carried over from the retired `BRINGUP_PLAN.md`)
