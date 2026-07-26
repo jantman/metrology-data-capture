@@ -421,12 +421,17 @@ saw **(10 − 3.7) / 1050 ≈ 6 mA**. Typical MCU absolute-max input clamp curre
 pin. That is "don't do this," not a blowout. Latch-up generally needs an order of magnitude more,
 and would have announced itself as a hot part, a garbled LCD, or a flattened cell — none observed.
 
-**The board topology shields the die.** Per §11.11 the output path is MCU GPIO → **330 kΩ** →
-MMBT3904 base, with the **collector** on the connector pin. So:
+**The board topology probably shields the die.** Per §11.11 the output path is MCU GPIO →
+**330 kΩ** → MMBT3904 base, with the **collector** on the connector pin. So:
 
-- **Pin 1 does not connect to the MCU at all** — it lands on a 3904 collector, rated
+- **Pin 1 would not connect to the MCU at all** — it lands on a 3904 collector, rated
   V<sub>CEO</sub> = 40 V / V<sub>CBO</sub> = 60 V. Ten volts there is a non-event.
-- Only pins 2/3 reach MCU inputs, and those are the pins that took the ~6 mA.
+- Only pins 2/3 would reach MCU inputs, and those are the pins that took the ~6 mA.
+
+⚠ **This is inference, not measurement** — see §5.1a. Only the battery side of the board has ever
+been observed; the MCU is an unreachable COB blob on the LCD side, so the routing *to* the base
+resistors and the fate of pins 2/3 are read off the visible components rather than traced. Treat
+this as supporting argument. The load-bearing evidence is the next paragraph, which is empirical.
 
 **Decisive: all three pins demonstrably still work — *after* the over-drive.** §11.14/§11.15 show
 that pins 2 and 3 still receive edges (either one triggers a response), that pin 1's output driver
@@ -452,15 +457,19 @@ port designed to talk to exactly one proprietary cable looks like.
   'sink' can let the magic smoke out" on newer iGaging encoders) is a real warning worth heeding
   going forward, but it describes hard-grounding a driven output, which is not what happened here.
 
-### 4.3 Cheap checks, worth doing while the board is open
+### 4.3 Cheap checks
 
-1. Diode-test pins 1/2/3 to GND and to the internal rail; compare the three against each other. A
-   blown clamp shows as a shorted or missing diode drop. **Asymmetry between pins 2 and 3 is the
-   thing to look for** — they are supposed to be symmetric inputs.
-2. Compare Q1 and Q2 in-circuit (base–emitter and collector–emitter drops).
-3. Keep in mind that "the mic reads correctly" tests the LCD and encoder, **not** the port — the
-   bench log repeatedly uses it as an interface health check, which it is not. The real port health
-   check is the §11.15 pin-1 response, and that one passes.
+**Closed-case, do now — no reason to wait.** Diode-test pins 1/2/3 to GND **through the breakout**,
+with the battery out, and compare the three readings against each other. A blown clamp shows as a
+shorted or missing diode drop. **Asymmetry between pins 2 and 3 is the thing to look for** — they
+are supposed to be symmetric inputs, so they should read alike. This needs no board access at all.
+
+**Deferred to the batched opening (§5.1):** comparing Q1 and Q2 in-circuit, and diode-testing the
+pins against the *internal rail* rather than ground.
+
+Keep in mind throughout that "the mic reads correctly" tests the LCD and encoder, **not** the port —
+the bench log repeatedly uses it as an interface health check, which it is not. The real port health
+check is the §11.15 pin-1 response, and that one passes.
 
 ---
 
@@ -468,18 +477,68 @@ port designed to talk to exactly one proprietary cable looks like.
 
 These are things the documents either never considered, or proposed and then never ran.
 
-### 5.1 Ring out Q1/Q2 collectors and the jumper matrix to the connector pins — **do this first**
-Zero risk, no instruments beyond a DMM, board already accessible, and it resolves §2.1 (two OC
-drivers vs. one output pin) plus tells you which jumper positions gate which pin. §11.11 explicitly
-identifies the jumper matrix as *"selects which signals route to which Micro-USB pins"* and then
-never traces a single one. If a bridged/open jumper is disabling the data output on this SKU, that
-is the whole answer, and it is sitting on the bench right now.
+> **⚠ Access constraint — read before ranking any of these.** The micrometer must be treated as
+> **closed by default.** Opening it again costs real risk: the FPC retaining-clip tabs broke during
+> the §11.11 teardown and the tape/glue repair **will not tolerate much strain**, so a re-open could
+> take the mic out of service entirely. Every experiment below is therefore tagged
+> **[closed-case]** (doable through the Micro-USB breakout, which exposes all five pins with the
+> case shut) or **[needs board access]**. **Exhaust every [closed-case] item first**, then batch
+> *all* remaining board work into a single planned opening — see §5.1.
 
-### 5.2 Measure the internal logic rail across C4/C5 — **open since investigation §10, never done**
-§10 lists it as *(pending)*; §11.2 notes *"DATA's high level, once it responds, reveals the rail
-voltage"* — but pin 1 responds now, and the rail was still never measured. Everything about drive
-levels, pull-up rail choice, and level-shifter selection depends on this number. The board has been
-open twice since.
+### 5.1 Board-access work — **batch it into ONE opening, and do it last** **[needs board access]**
+Individually these are the cheapest, highest-information tests in the project; collectively they
+are gated behind a re-open that risks the FPC repair. So: **do not open the mic for any one of
+them.** Write the full checklist first, do them all in one session, and reinforce the FPC while
+it is open.
+
+The checklist, when that day comes:
+1. **Ring Q1/Q2 collectors to connector pins 1/2/3.** Resolves §2.1 — two open-collector drivers
+   but only one identified output pin. Also confirms (rather than assumes) that pin 1 lands on a
+   transistor collector rather than an MCU pin, which is currently an inference (§5.1a).
+2. **Trace the `J10–J81` jumper matrix.** §11.11 identifies it as *"selects which signals route to
+   which Micro-USB pins"* and then traces none of it. If a bridged/open jumper disables the data
+   output on this SKU, that is the whole answer.
+3. **Trace the DATA button's contacts** to Q1/Q2 and to pins 1/2/3 (§10.5). In the reference
+   Digimatic design the cable's data pushbutton is part of the port interface, not a private MCU
+   input.
+4. **Measure the internal logic rail across C4/C5** (see §5.2 — but try the closed-case estimate
+   first).
+5. **Compare Q1 and Q2 in-circuit** (base–emitter, collector–emitter) for over-drive damage (§4.3).
+
+### 5.1a Everything about the MCU side is inference, not observation
+§11.11 records that the controller is an unmarked COB blob on the **LCD side, which cannot be
+reached** — the LCD is soldered and the assembly glued into the front cover. So the accessible
+(battery) side is the *only* side ever observed.
+
+That means the following are **plausible readings of the visible components, not measurements**:
+
+- "MCU-GPIO → 330 kΩ → NPN base, collector = output pin, emitter = GND" (§11.11). The base-resistor
+  and transistor packages are visible; the connection *to the MCU* runs through the hidden side.
+- That pins 2/3 land on MCU inputs directly, rather than being routed through the hidden side or
+  gated by the jumper matrix.
+- That there are no additional components — the hidden side has never been photographed.
+
+This does not overturn anything, but it should be stated wherever the topology is used as an
+argument. In §4 in particular, the topology reasoning is *supporting* inference; the load-bearing
+evidence there is empirical (all three pins still work after the over-drive). Checklist item 5.1.1
+is what would convert the inference into a measurement.
+
+### 5.2 The internal logic rail — **estimate it closed-case first** **[closed-case]**
+Still unmeasured since investigation §10 marked it *(pending)*; everything about drive levels,
+pull-up rail choice, and level-shifter selection depends on it. But a direct measurement across
+C4/C5 needs the board open (§5.1), so try the indirect route first:
+
+**Sweep the input threshold.** Pin 1's strobe is a reliable, repeatable response to (button + edges
+on pin 2 or pin 3). So hold the button, drive pin 2 with the clock, and **ramp the drive amplitude
+down** — 3.0, 2.5, 2.0, 1.5, 1.2, 1.0, 0.8 V — recording the amplitude at which pin 1 stops
+responding. A CMOS input threshold sits near **0.5 × V<sub>DD</sub>**, so a cut-off near 1.5 V
+implies a ~3 V rail, and a cut-off near 0.8 V implies ~1.6 V. That is a usable estimate obtained
+entirely through the breakout, with no risk, using tooling that already exists.
+
+**Corollary never considered:** every pull-up test used a **3 V** rail. If the internal rail is
+1.5 V or 1.8 V (the docs' own stated family range), a 3 V pull-up is over-driving the inputs and
+back-feeding the part through its clamps — which could plausibly be *why* the inputs "do nothing."
+Nobody tried 1.8 V pull-ups. The threshold sweep above settles which case you are in.
 
 **Corollary never considered:** every pull-up test used a **3 V** rail. If the internal rail is
 1.5 V or 1.8 V (the docs' own stated family range), a 3 V pull-up is over-driving the inputs and
@@ -683,11 +742,12 @@ repo.
 6. Record the >9.5 V over-drive (§11.8) and the FPC repair (§11.11) as named events with a
    *low* assessed damage risk and the reasoning why (§4) — not as a leading hypothesis.
 
-**Bench work, in order (all cheap, none require a purchase):**
-7. DMM: ring Q1/Q2 collectors and the `J10–J81` matrix to connector pins 1/2/3 (§5.1); diode-test
-   all three pins for over-drive damage (§4).
-8. DMM/scope: measure the internal logic rail across C4/C5 (§5.2). Then repeat the key pull-up test
-   at that rail voltage rather than 3 V.
+**Bench work — [closed-case] only, in order (no purchase, no opening the mic):**
+7. DMM through the breakout, battery out: diode-test pins 1/2/3 to GND and compare the three.
+   **Asymmetry between pins 2 and 3 is the signal** (§4.3).
+8. Estimate the internal rail by **sweeping the input threshold** — hold the button, clock pin 2,
+   and ramp the amplitude down until pin 1 stops strobing; the cut-off is ≈ 0.5 × V<sub>DD</sub>
+   (§5.2). Then repeat the key pull-up tests at the implied rail rather than a blanket 3 V.
 9. Fix `read_raw` (`:STOP` first) and re-run one pin-1 capture to confirm full-depth RAW works
    again (§1.4).
 10. Capture the pin-1 event end-to-end: true duration, then walk a µs-scale window through it at
@@ -698,20 +758,25 @@ repo.
 12. Burst + pull-ups + button on pins 2 and 3 (§5.5); the missing {CLK 3, REQ 2 @ 3 V} corner and a
     phase-swept dual drive (§5.6). Repeat the decisive pull-up tests at **100 kΩ** rather than
     10 kΩ (§5.7a).
-13. Trace the DATA button's electrical path on the board (§10.5) — in the reference Digimatic
-    design the cable's data pushbutton is part of the port interface, not a private MCU input.
-    That is the one bench observation none of the researched protocols explains.
 
-**Purchases, if 7–13 come up empty:**
-14. An 8-channel logic analyzer (~$15) **before** the $70 cable (§5.4) — now independently
-    recommended by `igaging_protcol_research.md` §7.3.
-15. Then the cable sniff — **in-line**, per `igaging_protcol_research.md` §7: because the control
+**Purchases, once 7–12 are exhausted — recommended, not a last resort:**
+13. An 8-channel logic analyzer (~$15) **before** the $70 cable (§5.4) — now independently
+    recommended by `igaging_protcol_research.md` §7.3. It removes the readout limitation that has
+    distorted every result to date and is the right instrument for step 14 anyway.
+14. Then the cable sniff — **in-line**, per `igaging_protcol_research.md` §7: because the control
     box is a USB HID keyboard, you can correlate each captured raw frame against the exact decimal
     string it types, which settles framing *and* the counts-per-unit constant in one session. The
     bench docs' "sniff the cable" plan never noted this.
-16. A second micrometer is **not** recommended — it controls for damage without revealing the
+15. A second micrometer is **not** recommended — it controls for damage without revealing the
     protocol, and §4 puts the damage risk low. Reconsider only if step 7's diode tests come back
     asymmetric between pins 2 and 3.
+
+**[needs board access] — LAST, and only as one batched session:**
+16. Everything in §5.1's checklist at once: ring Q1/Q2 collectors and the `J10–J81` matrix to the
+    connector pins, trace the DATA button's contacts (§10.5), measure the rail across C4/C5,
+    compare Q1/Q2 in-circuit. **Do not open the mic for any single one of these** — the FPC repair
+    will not tolerate much strain, and a re-open risks the unit. Write the checklist first, and
+    reinforce the FPC while it is open.
 
 ---
 

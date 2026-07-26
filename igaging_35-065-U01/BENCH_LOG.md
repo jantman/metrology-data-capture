@@ -311,6 +311,22 @@ coupling-only lines; **re-check probe 1×/10× switches after handling.** Tools 
 
 ### 11.11 Board teardown (2026-07-25/26) — the OPEN-COLLECTOR hypothesis
 
+> ## ⚠ STANDING CONSTRAINT arising from this teardown
+>
+> **1. Do not re-open the mic except as a last resort, and then only once.** The FPC retaining-clip
+> tabs broke here; the tape/glue repair **will not tolerate much strain**, so another opening risks
+> taking the unit out of service. Exhaust every experiment doable through the Micro-USB breakout
+> (case closed) first, then batch *all* board work into a single planned session with a written
+> checklist, and reinforce the FPC while it is open. Checklist: `review.md` §5.1.
+>
+> **2. Only the battery side has ever been observed.** The MCU is an unreachable COB blob on the
+> LCD side. So the topology described below — "MCU-GPIO → 330 kΩ → NPN base, collector = output
+> pin" — is a **plausible reading of the visible components, not a traced circuit**. The same
+> applies to the assumption that pins 2/3 land directly on MCU inputs rather than being routed or
+> gated on the hidden side, and to the assumption that no further components exist there. The
+> hidden side has never been photographed. Wherever this topology is used as an argument, it is
+> supporting inference; load-bearing conclusions need empirical backing. See `review.md` §5.1a.
+
 With injection exhausted, opened the housing for photos (in `board_teardown/`). **Could not reach
 the MCU side** — the LCD is soldered to the board and the board/LCD assembly is glued into the
 front cover; separating it needs enough force to crack the glass, so it was left intact (only a

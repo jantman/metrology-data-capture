@@ -7,6 +7,29 @@
 The connector is **mapped**, the mic **responds** to stimulus, but the **measurement data has not
 been decoded** and has never been observed on any pin.
 
+## ⚠ Hardware access constraints — read first
+
+**1. The mic is CLOSED by default. Treat re-opening as a last resort.** The read-head FPC
+retaining-clip tabs broke during the §11.11 teardown, and the tape/glue repair **will not tolerate
+much strain**. Another opening could take the unit out of service. Everything below is tagged
+**[closed-case]** (doable through the Micro-USB breakout, which exposes all five pins with the case
+shut) or **[needs board access]**. **Exhaust every [closed-case] avenue first**, then do *all*
+remaining board work in one planned session with a written checklist — and reinforce the FPC while
+it is open.
+
+**2. Only ONE side of the board has ever been seen.** The MCU is an unmarked chip-on-board blob on
+the **LCD side**, which cannot be reached — the LCD is soldered on and the assembly is glued into
+the front cover; separating it means cracking the glass. So everything about the MCU side is
+**inference from the battery side**, including:
+
+- that the drivers are wired MCU-GPIO → 330 kΩ → MMBT3904 base with the collector on the pin,
+- that pins 2/3 land on MCU inputs rather than being routed or gated on the hidden side,
+- that there are no further components — the hidden side has never even been photographed.
+
+None of that is overturned by anything known, but it is **not measured**. Where the topology is used
+as an argument (e.g. the damage assessment below), it is supporting reasoning; the load-bearing
+evidence is empirical.
+
 ## Confirmed (this unit)
 
 | | |
@@ -39,30 +62,47 @@ been decoded** and has never been observed on any pin.
 
 ## Next experiments (ranked)
 
-1. **DMM only, board already accessible:** ring Q1/Q2 collectors, the `J10–J81` matrix, and the
-   **DATA button contacts** to connector pins 1/2/3. Resolves the two-drivers/one-output
-   contradiction and tests whether the button is part of the port interface.
-2. **Measure the internal rail** across C4/C5, then redo the key pull-up tests at that voltage and
-   at **100 kΩ** (all prior work used 3 V / 10 kΩ — see `review.md` §5.7a).
+### [closed-case] — do all of these first
+
+1. **DMM through the breakout, battery out:** diode-test pins 1/2/3 to GND and compare the three.
+   **Asymmetry between pins 2 and 3 is the thing to look for** — they should read alike, being
+   symmetric inputs. Checks for over-drive damage without opening anything.
+2. **Estimate the internal rail without opening the mic:** hold the DATA button, clock pin 2, and
+   **ramp the drive amplitude down** (3.0 → 2.5 → 2.0 → 1.5 → 1.2 → 1.0 → 0.8 V) until pin 1 stops
+   strobing. A CMOS input threshold sits near **0.5 × V<sub>DD</sub>**, so a cut-off near 1.5 V
+   implies a ~3 V rail and one near 0.8 V implies ~1.6 V. Then redo the key pull-up tests at the
+   implied rail and at **100 kΩ** (all prior work used a blanket 3 V / 10 kΩ — `review.md` §5.7a).
 3. **Capture the pin-1 event end to end** — trigger on its falling edge with the trigger at the
    far left, long enough to catch the rising edge; then walk a µs-scale window through it.
-   Fix `read_raw` first (`:STOP` before reading — see `review.md` §1.4).
+   Fix `read_raw` first (`:STOP` before reading — `review.md` §1.4).
 4. **Deliver the documented waveform**: 21-cycle burst, 9 kHz, **20 % duty** (22 µs high / 89 µs
    low), idle LOW, into pin 2 then pin 3, gated from pin 1's falling edge. No test has ever used
    anything but a 50 % square.
-5. **Buy the hardware — this is the recommended path, not a last resort.** An **8-channel logic
-   analyzer (~$15)** first; it removes the 1000-point-screen-read limitation that has distorted
-   every result to date and is the right instrument for step 6 anyway.
+
+### Purchases — recommended, not a last resort
+
+5. **8-channel logic analyzer (~$15)** first. It removes the 1000-point-screen-read limitation that
+   has distorted every result to date, and it is the right instrument for step 6 anyway.
 6. **The `100-700-USB-MC` cable (~$70).** Sniff it **in-line**, so raw frames can be correlated
    against the exact decimal string its HID keyboard types — that settles framing *and* the
-   counts-per-unit constant in one session. It is also dual-purpose: if the RE stalls, the cable
-   *is* a working data-capture solution.
+   counts-per-unit constant in one session. Dual-purpose: if the RE stalls, the cable *is* a
+   working data-capture solution.
 
-> **Honest assessment of 3–4 vs 5–6.** Steps 1–2 are information-gathering and free; do them.
-> Steps 3–4 are the best remaining guesses, but a timed handshake has too many free parameters
-> (sequence, timing, which pin, duty, gating) to brute-force reliably from outside — call it
-> ~15–20 % combined. Steps 5–6 are the only path with a guaranteed outcome. Five bench sessions in,
-> ~$85 is cheap against the alternative.
+### [needs board access] — LAST, and only as one batched session
+
+7. Do the whole checklist in a single opening (`review.md` §5.1), never for one item alone:
+   ring **Q1/Q2 collectors** to pins 1/2/3 (resolves the two-drivers/one-output contradiction),
+   trace the **`J10–J81` jumper matrix**, trace the **DATA button contacts** (in the reference
+   Digimatic design the cable's data button is part of the port interface, not a private MCU
+   input), measure the rail across **C4/C5**, and compare **Q1/Q2 in-circuit**. Reinforce the FPC
+   while it is open.
+
+> **Honest assessment.** Steps 1–2 are free information — do them. Steps 3–4 are the best remaining
+> guesses, but a timed handshake has too many free parameters (sequence, timing, which pin, duty,
+> gating) to brute-force reliably from outside; call it **~15–20 % combined**. Steps 5–6 are the
+> only path with a guaranteed outcome, and five bench sessions in, ~$85 is cheap against the
+> alternative. Step 7 is individually the highest-information work in the project but is gated
+> behind a re-open that risks the unit — which is exactly why it now sits last rather than first.
 
 ## Was the port damaged by the over-drive? — probably not
 
@@ -73,8 +113,10 @@ explanation for the current symptom**, for three reasons (full analysis in `revi
 - **~6 mA.** The 10 V EMF sat behind 50 Ω + the 1 kΩ series resistor; a pin clamping at ~3.7 V saw
   (10 − 3.7)/1050 ≈ 6 mA, inside the ±10–20 mA absolute-max clamp current typical of MCU inputs.
   Latch-up needs roughly an order of magnitude more and would have been obvious.
-- **Topology.** The output path is MCU → 330 kΩ → MMBT3904 base, collector on the pin — so **pin 1
-  never touches the die**, and 10 V on a 3904 collector (V<sub>CEO</sub> 40 V) is a non-event.
+- **Topology** *(inference — see the access constraints above)*. The output path appears to be
+  MCU → 330 kΩ → MMBT3904 base with the collector on the pin, which would mean **pin 1 never
+  touches the die**; 10 V on a 3904 collector (V<sub>CEO</sub> 40 V) is a non-event. Read off the
+  battery side only; the routing through the hidden side is not traced.
 - **All three pins still work, measured *after* the over-drive** (§11.14/§11.15): pins 2/3 still
   receive edges, pin 1's driver still pulls hard low, the trigger logic still evaluates correctly.
   Damage would have to have spared all of that and killed only the data path.
@@ -85,10 +127,11 @@ timed handshake nobody has guessed.**
 Caveat worth keeping: "the mic reads correctly" tests the LCD and encoder, **not** the port. The
 real port health check is the §11.15 pin-1 response — and it passes.
 
-**Cheap confirmation while the board is open:** diode-test pins 1/2/3 to GND and to the rail and
-compare them; asymmetry between pins 2 and 3 is the thing to look for, since they should be
-symmetric inputs. A second micrometer is *not* worth buying for this — it controls for damage
-without revealing the protocol.
+**Cheap confirmation, [closed-case]:** diode-test pins 1/2/3 to GND *through the breakout* with the
+battery out and compare them (next-experiments step 1) — asymmetry between pins 2 and 3 is the
+thing to look for, since they should be symmetric inputs. Testing against the internal rail, and
+comparing Q1/Q2 in-circuit, wait for the batched opening. A second micrometer is *not* worth buying
+for this — it controls for damage without revealing the protocol.
 
 ## Files
 
