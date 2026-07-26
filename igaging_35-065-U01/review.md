@@ -1,9 +1,14 @@
 # Documentation Review — iGaging 35-065-U01 reverse-engineering
 
-**Date:** 2026-07-26
+**Date:** 2026-07-26 (updated same day to cover `igaging_protcol_research.md`)
 **Scope:** `README.md`, `PROTOCOL_RESEARCH.md`, `BRINGUP_PLAN.md`,
-`claude_desktop_initial_investigation.md` (§0–§11.16), cross-checked against the bench tooling
-(`*.py`) and the raw capture artifacts in `captures/`.
+`claude_desktop_initial_investigation.md` (§0–§11.16), and `igaging_protcol_research.md`,
+cross-checked against the bench tooling (`*.py`) and the raw capture artifacts in `captures/`.
+
+> **Update note:** §§0–9 were written before `igaging_protcol_research.md` existed. That document
+> is reviewed in **§10**, and the places where it changes an earlier finding are marked
+> **[amended — §10]** inline. Nothing in §§1–4 was weakened by it; several items in §5 and §8 got
+> sharper.
 
 **Method:** every load-bearing empirical claim in the docs was traced back to (a) the script that
 produced it and (b) the capture files it should have written. Where files exist, they were
@@ -229,6 +234,11 @@ the stated reasoning is unsound and is now embedded in `BRINGUP_PLAN.md`'s banne
 
 ### 2.4 `PROTOCOL_RESEARCH.md` was never updated and now contradicts the bench log
 
+**[amended — §10]** `igaging_protcol_research.md` (2026-07-26) now supersedes most of this file
+with better-sourced content, but does not say so, and the two files disagree on sign encoding
+(one's vs two's complement) and on the DATA-line pull direction. Two overlapping protocol-research
+documents with near-identical names is itself a hazard — see §10.6.
+
 | `PROTOCOL_RESEARCH.md` says | Bench log says |
 |---|---|
 | "**No REQ line.**" (listed under *high confidence*) | §11.13 builds an entire hypothesis on a REQ line |
@@ -398,6 +408,13 @@ the port is damaged, buying the `100-700-USB-MC` cable will produce a confusing 
 *this* unit, and the money is better spent on a second micrometer (which also gives a
 known-good comparison unit — something the project has never had).
 
+**[amended — §10]** `igaging_protcol_research.md` F2 sharpens this considerably. It quotes the
+TouchDRO author warning that on *newer* iGaging encoders — unlike the older, forgiving ones —
+"grounding or connecting the data pin … to a low-impedance 'sink' can let the magic smoke out."
+This unit is a newer part, and §11.7 drove ~10 V through 1 kΩ into every pin for a session. The
+damage hypothesis is no longer speculative housekeeping; it has a named failure mode from the most
+authoritative community source.
+
 Cheap partial checks, in order:
 1. Diode-test pins 1/2/3 to GND and to the internal rail with a DMM; compare the three. A blown
    clamp shows up as a shorted or missing diode drop.
@@ -418,7 +435,7 @@ identifies the jumper matrix as *"selects which signals route to which Micro-USB
 never traces a single one. If a bridged/open jumper is disabling the data output on this SKU, that
 is the whole answer, and it is sitting on the bench right now.
 
-### 5.2 Measure the internal logic rail across C4/C5 — **still open since §10, never done**
+### 5.2 Measure the internal logic rail across C4/C5 — **open since investigation §10, never done**
 §10 lists it as *(pending)*; §11.2 notes *"DATA's high level, once it responds, reveals the rail
 voltage"* — but pin 1 responds now, and the rail was still never measured. Everything about drive
 levels, pull-up rail choice, and level-shifter selection depends on this number. The board has been
@@ -456,6 +473,21 @@ So: **21-cycle burst @ 9 kHz + ~7 ms gap, into pin 2 or pin 3, with pull-ups and
 — the exact experiment `PROTOCOL_RESEARCH.md` ranks #1 — has never been performed under the
 conditions now known to be necessary. This is a one-line change to an existing script.
 
+### 5.5a Clock **duty cycle** has never been varied — every test used 50 % **[verified, new — §10]**
+
+`igaging_protcol_research.md` §4.2 specifies the 21-bit clock as **20 % duty: 22 µs high, 89 µs
+low, idle LOW**, sourced to `SCALE_CLK_DUTY 20` in the canonical Arduino-DRO implementation. That
+is a *narrow high pulse*, not a symmetric square.
+
+Every clock this project has ever produced was **50 % duty**: `scpi_lib.Awg.square()` defaults to
+`duty=50`, `clock_injection.py` defaults `--duty 50`, and `burst_capture.configure_burst()` never
+issues `:SOURce1:FUNCtion:SQUare:DCYCle` at all — so even the burst trains were 50 %. No document
+ever lists duty cycle as a variable.
+
+If the receiver latches on a short high pulse or times its internal sampling from the falling edge,
+a 50 % clock at 9 kHz presents a 55 µs high time where the reference implementation presents 22 µs.
+This is a one-parameter change to existing tooling and belongs in the same run as §5.5's burst test.
+
 ### 5.6 The two-input handshake is 3 cells of a large matrix, not "exhausted"
 Run, per §11.16's table: {CLK 2, REQ 3 @ 0 V}, {CLK 2, REQ 3 @ 3 V}, {CLK 3, REQ 2 @ 0 V}. Never
 run:
@@ -483,6 +515,30 @@ reinterpretation of everything §11.14–11.16 found: pin 1 = DRDY (device asser
 requests a transmission); the host must then clock it. A free-running asynchronous clock would
 never satisfy that. The fix is to trigger on pin 1 falling and *gate* the AWG burst from that
 trigger — the DG902 supports external/triggered burst.
+
+### 5.7a The 10 kΩ pull-up may be too strong for this board's drivers **[new — §10]**
+
+`igaging_protcol_research.md` F5/§4.1 recommends **~100 kΩ** pull-ups ("the lines behave as
+open-drain/weakly-driven"; Yuriy: *"Pulling the lines to Vcc using a pair of 100 kOhm resistors did
+the trick"*). Every bench test in this project used **10 kΩ** — ten times stronger.
+
+Combine that with §11.11's own board observation and it becomes a live concern. Q1/Q2 are MMBT3904
+NPNs fed through **330 kΩ** base resistors, so with a 3 V drive the base current is
+(3 − 0.7)/330 kΩ ≈ **7 µA**, and at a typical h<sub>FE</sub> ≈ 100 the collector can sink at most
+≈ **0.7 mA** before leaving saturation. A 10 kΩ pull-up to 3 V demands **0.3 mA** — the same order
+of magnitude. The margin is roughly 2×, not the 20–50× you would normally want.
+
+Two consequences:
+
+- Pin 1's observed low is not a clean V<sub>CE(sat)</sub>, which fits §2.2's finding that the
+  "−0.7 V open-collector low" is not behaving like a saturated NPN.
+- More importantly, **§11.16's "pin 2 / pin 3 → 0 % hard-low" verdict assumed the pull-up was weak
+  enough not to overpower a driver.** If either input pin is also (weakly) driven — the unresolved
+  Q1/Q2-vs-one-output contradiction in §2.1 — a 10 kΩ pull-up could hold it well above the
+  "hard-low" threshold while it is being driven. The negative is softer than stated.
+
+Re-run the key pull-up tests at **100 kΩ** (and ideally at the measured internal rail, §5.2) before
+treating any "held at the rail" result as final.
 
 ### 5.8 Try the Bluetooth kit as the sniff target
 `README.md` names two adapters — `100-700-USB-MC` **and `35-BT28-MC`**. Every "next step" in every
@@ -557,20 +613,24 @@ repo.
 | 1 | `pullup_clock_capture.py:108` | `read_raw()` called while scope is in `:RUN` | **All §11.12 Test 2 capture files are 0 bytes** (§1.4). Fix: `:STOP` first, verify point count. |
 | 2 | `pullup_passive_monitor.py`, `pullup_clock_capture.py`, `req_capture.py` | Poll-based `VMIN` monitoring covers ~4–12 % of wall-clock time | Every "monitored N s, no dip" negative is inconclusive, not negative (§1.3). Fix: arm a `NORMal`-sweep single-shot trigger and let the scope watch continuously. |
 | 3 | `two_input_capture.py:70`, `pin_sweep.py:95`, `pullup_clock_capture.py:62-65` | Output tags omit the varying parameter (`--req-volts`, `--freq`, `--amp`) | Runs silently overwrite each other; §11.16's table has 3 rows and 2 files (§3.5). |
-| 4 | `analyze_capture.py:82` `sample_data_on_clock` | Samples DATA **at** the clock edge index | `PROTOCOL_RESEARCH.md` documents DATA valid **4.75 µs after** the edge. Sampling at the transition is the worst possible instant. Needs a configurable sample delay. |
+| 4 | `analyze_capture.py:82` `sample_data_on_clock` | Samples DATA **at** the clock edge index | `PROTOCOL_RESEARCH.md` says DATA is valid **4.75 µs after** the edge; `igaging_protcol_research.md` §4.2 says **~2 µs after the *falling* edge** (and see §10.4 — that 2 µs derivation looks like an arithmetic slip for ~4 µs). Either way, sampling *at* the transition is the worst possible instant, and the analyzer needs a configurable post-edge delay **and** an edge-polarity choice. |
 | 5 | `analyze_capture.py:85` `autocorr_period(maxlen=40)` | Cannot find a frame longer than 40 bits | The §11.13 Digimatic hypothesis is **52 bits** — the analyzer structurally cannot confirm the project's own live hypothesis. |
 | 6 | `analyze_capture.py:39` `digitize()` | Threshold derived from global min/max | One noise spike (and pin 1 shows −1.04 V excursions) skews the threshold for the whole record. Use a percentile or a fixed rail-referenced threshold. |
 | 7 | `analyze_capture.py:27` `load_channel()` | No guard for empty/missing `.bin` | Crashes on the 0-byte §11.12 captures and on `readingA` (ch1 only). |
 | 8 | `clock_injection.py:95` `responded()` | Fires on `transitions ≥ 10 and vpp ≥ 0.3 V` | Measured crosstalk is ~0.75 Vpp and clock-synchronous — **the auto-detector would have declared "RESPONSE" on pure crosstalk.** `BRINGUP_PLAN.md` §4 describes it as if it discriminates. Results were saved by manual interpretation, not by the tool. |
 | 9 | `req_capture.py:86`, `pullup_passive_monitor.py:66` | Print *"Digimatic-style SPC confirmed"* / *"real frame!"* on any triggered falling edge | Over-claiming in tool output feeds over-claiming in the log. A trigger is not a confirmation. |
 | 10 | `scpi_lib.py:232` | High-Z check `if "E+3" not in rb and "E37" not in rb` | `"E+3"` also matches a `1.0E+3` (1 kΩ) readback, which would pass the guard. Should compare numerically against ≥1e30. |
-| 11 | `igaging_decode.py` | `FRAME_BITS`/`SIGN_ENCODING`/`TICKS_PER_MM` still placeholders; `GROUND_TRUTH = {}` | Expected at this stage — noted only so it isn't mistaken for validated. |
+| 11 | `igaging_decode.py` | `FRAME_BITS`/`SIGN_ENCODING`/`TICKS_PER_MM` still placeholders; `GROUND_TRUTH = {}` | Expected at this stage — noted only so it isn't mistaken for validated. **[amended — §10]** `SIGN_ENCODING = "ones"` should now default to `"twos"`: `igaging_protcol_research.md` F8 resolves the long-standing dispute with a code citation (sign-extension `v |= 0xFFF00000`), which is two's complement, not one's. |
+| 12 | `scpi_lib.py:244` `square()`, `burst_capture.py:32` `configure_burst()` | Duty cycle is fixed at 50 %; `configure_burst` never issues `:…:SQUare:DCYCle` at all | The reference 21-bit clock is **20 % duty** (§5.5a). No test has ever delivered the documented waveform shape. |
 
 ---
 
 ## 8. Recommended action list
 
 **Correct the record (no bench time):**
+0. Add a "see bench log §11" banner to `igaging_protcol_research.md` §0, strip the stray
+   `</content>`/`</invoke>` markup at EOF, and resolve the two-protocol-research-files situation
+   (§10.4, §10.6).
 1. Retract/annotate §11.12's "exhausted / never drives any pin" conclusion and §11.16's
    "byte-for-byte identical" claim; state the actual resolution limit (50 µs/sample) alongside
    every 2026-07-26 conclusion.
@@ -594,13 +654,23 @@ repo.
     two very different readings (§5.3).
 11. Gate a 21-cycle 9 kHz burst **from** the pin-1 falling edge into pin 2, then pin 3 (§5.7) —
     the "pin 1 is DRDY, clock it while it's low" model. This is the highest-value new experiment.
+    Deliver it at the **documented waveform**: 20 % duty, 22 µs high / 89 µs low, idle LOW (§5.5a).
 12. Burst + pull-ups + button on pins 2 and 3 (§5.5); the missing {CLK 3, REQ 2 @ 3 V} corner and a
-    phase-swept dual drive (§5.6).
+    phase-swept dual drive (§5.6). Repeat the decisive pull-up tests at **100 kΩ** rather than
+    10 kΩ (§5.7a).
+13. Trace the DATA button's electrical path on the board (§10.5) — in the reference Digimatic
+    design the cable's data pushbutton is part of the port interface, not a private MCU input.
+    That is the one bench observation none of the researched protocols explains.
 
-**Purchases, if 7–12 come up empty:**
-13. An 8-channel logic analyzer (~$15) **before** the $70 cable (§5.4).
-14. Then the cable sniff — but consider a second micrometer instead if step 7 suggests damage
-    (§4), since it doubles as a known-good reference.
+**Purchases, if 7–13 come up empty:**
+14. An 8-channel logic analyzer (~$15) **before** the $70 cable (§5.4) — now independently
+    recommended by `igaging_protcol_research.md` §7.3.
+15. Then the cable sniff — **in-line**, per `igaging_protcol_research.md` §7: because the control
+    box is a USB HID keyboard, you can correlate each captured raw frame against the exact decimal
+    string it types, which settles framing *and* the counts-per-unit constant in one session. The
+    bench docs' "sniff the cable" plan never noted this.
+16. Consider a second micrometer instead if step 7 suggests damage (§4), since it doubles as a
+    known-good reference.
 
 ---
 
@@ -621,3 +691,157 @@ For balance, these conclusions are well-evidenced and should be treated as solid
   well-designed experiment.
 - **The open-collector insight** (§11.11) — the pull-down/pull-up realization was the correct
   diagnosis of why two sessions of work were blind, and it is what produced the breakthrough.
+
+---
+
+## 10. Review of `igaging_protcol_research.md` (added 2026-07-26)
+
+**Overall: this is the strongest document in the directory.** It is better sourced, better
+calibrated about its own uncertainty, and it resolves two questions the older research left open.
+It has one structural flaw — it is written as though the bench work does not exist — and a handful
+of small errors.
+
+### 10.1 What it does notably well
+
+- **Confidence-ranked findings (★☆ scale) with the reasoning for each rank.** F7 is explicitly held
+  at three stars with its own three counter-arguments listed. This is the right shape for research
+  that will be acted on with a soldering iron.
+- **Source-independence auditing.** It notices that the Instructables author (`sspence`) and the
+  Hobby-Machinist poster are **the same person**, and downgrades "two corroborating sources" to
+  one. It also notes Alex Whittemore *never published a capture* — he abandoned the breakout before
+  taking timing. Both are exactly the kind of check `PROTOCOL_RESEARCH.md` did not do, and both
+  materially change how much weight the 21-bit hypothesis deserves.
+- **F8 resolves the one's-vs-two's-complement dispute** that `PROTOCOL_RESEARCH.md` explicitly
+  punted on (*"sources conflict; resolve on bench"*). It does so correctly and by the right method:
+  citing the canonical implementation's sign-extension (`v |= 0xFFF00000`) rather than the prose,
+  and diagnosing "one's compliment" as long-propagated loose wording. Verified — that code is
+  textbook two's-complement sign extension.
+- **F9's counts-per-unit candidate table is a genuine contribution.** I checked all nine numbers:
+  102 400/in → 4031.50/mm, 0.2480 µm, +0.04 %; 4000/mm → 101 600/in, 0.2500 µm, −0.74 %;
+  4096/mm → 104 038/in, 0.2441 µm, +1.64 %. All correct. Turning "≈4030" into three testable
+  hypotheses with a 0.05 % discrimination criterion converts Phase C from "measure a constant" into
+  "decide between two designed values," which is a much stronger experiment.
+- **§3's discrimination table** is the single most useful half-page: a set of observations that each
+  map to one protocol family. See §10.3 — applied to this unit's data it produces a real result.
+- **The mini-B pinout inversion trap** (F4) and the wire-colour warning (F3) are the kind of
+  practical landmine that only shows up in this sort of survey.
+- **The in-line cable-sniff insight** (§7): because the box is a HID keyboard, raw frames can be
+  correlated against the typed decimal string. Three documents recommend sniffing the cable; only
+  this one notes *why* it settles the scale factor too.
+
+### 10.2 The structural flaw: it does not know about the bench log
+
+The document never cites `claude_desktop_initial_investigation.md` §11, and several of its
+higher-confidence claims are already **falsified on this specific unit**:
+
+| Claim | Rank | Status on this unit |
+|---|---|---|
+| F4: pin 1 = VDD (supply into the tool) | ★★★★☆ | §11.12: solid 3 V on pin 1 drew **0.0 mA** and changed nothing; §11.15: pin 1 is the mic's **output** |
+| F4/§4.1: pin 3 = DATA, driven by the tool | ★★★★☆ | §11.15: pin 3 is an **input**; driving it (+ button) makes pin 1 assert |
+| F4/§4.1: pin 2 = CLK into the tool | ★★★★☆ | Half-right: pin 2 *is* an input, but so is pin 3, and they are symmetric |
+| §0: "mic shifts out 21 bits on D+" | stated as the single most likely answer | §11.16: **no** connector pin carries measurement data under any stimulus tried |
+| §7 step 3: passive capture while moving the spindle | procedure | Already done (§11.4, §11.12 Test 1) — negative |
+| §10 open Q6: "whether the tool needs external VDD at all" | open | Already answered: no (§11.12, 0 mA) |
+
+None of this makes the document wrong as *research* — it is an accurate survey of what the
+community has published. But §0's executive summary asserts the conclusion far more confidently
+than §2's own star ratings support, and a reader who starts at §0 and stops there will rebuild a rig
+this project has already run three times. **§0 needs a banner pointing at §11 of the bench log.**
+
+### 10.3 The most valuable thing in it: §3 kills the Digimatic hypothesis
+
+The document's own discriminator table says:
+
+> | ID pin (4) measures 0 Ω to GND | 21-bit family (ID is grounded) |
+> | ID pin (4) floats / sits near VDD with a pull-up | Possibly REQ → Digimatic |
+
+and §5.1/§7 place Digimatic's **REQ on the ID pin (pin 4)**, calling it "a decisive discriminator
+you can check with a meter."
+
+**That meter check was done on 2026-06-21.** §11.3: *"Pins 4 and 5 are both GND — direct continuity
+between them and to battery negative."* Pin 4 is hard-grounded.
+
+So, by this document's own decisive criterion, **this unit is in the 21-bit family and is not
+Digimatic** — and §11.13's Digimatic hypothesis, which `BRINGUP_PLAN.md`'s banner still recommends
+trying first, is substantially weakened. It gets worse: `req_capture.py` drove REQ on pins **1, 2
+and 3** — never on pin 4, the only pin the documented mapping puts REQ on, and a pin where the test
+is impossible because it is tied to ground. **§11.13 never tested the hypothesis it was written to
+test.**
+
+This also resolves the §2.6 cable-recommendation tangle in favour of the micro-USB-native
+`100-700-USB-MC`, and it means the §11.13 reasoning ("two OC drivers = the device's CK + DATA")
+needs another explanation — see §2.1, still unreconciled and still answerable with a DMM.
+
+Note the document contains a small internal tension here: F4 says pin 4 is grounded on iGaging
+micro-B parts generally, while §5.1 says REQ "would land on the ID pin" and §7 step 4 instructs you
+to "pull pin 4 low." If step 2's continuity check finds pin 4 shorted to GND — as it is here —
+step 4 is not merely unnecessary, it is unperformable. The procedure should branch on step 2's
+result rather than listing both.
+
+### 10.4 Errors and soft spots found
+
+1. **Stray tool-call markup at end of file.** Lines 515–517 contain `</content>` and `</invoke>`
+   after the last source bullet. Delete.
+2. **The "2 µs" sample delay derivation does not follow from its own citation.** §4.2 cites
+   `scaleClockFirstReadDelay = F_CPU/4000000` and annotates it "= 2 µs at 16 MHz." At
+   F_CPU = 16 MHz that expression evaluates to **4**, not 2. Depending on how the constant is
+   consumed that is plausibly ~4 µs — which is notably close to the **4.75 µs** figure
+   `PROTOCOL_RESEARCH.md` takes from Rysium, and would make the two sources agree. As written the
+   document creates a conflict that may not exist. Worth re-reading the source line before pinning
+   a sample delay into firmware.
+3. **§4.3 range off by one.** 21-bit two's complement spans −1 048 576 … +1 048 575; the document
+   writes "±1 048 575." Cosmetic, but it is a range check someone will code against.
+4. **F1's 5 V warning is right for the wrong reason on this unit.** It warns that VBUS could exceed
+   "the tool's 3 V rail" — but §11.3 established the connector exposes **no rail at all**, so on
+   this unit a real USB port would land 5 V on a *signal* pin. Still dangerous, different mechanism.
+   (This is the same conflation that investigation §2 makes — see §2.5.)
+5. **§0's confidence outruns §2's.** Discussed in §10.2.
+6. **§7's procedure is partly already executed.** Steps 2 and 3 are done; step 4 is unperformable
+   (§10.3); step 5 has been run many times. A "what remains" pass over §7 against §11 would make it
+   actionable rather than duplicative.
+7. **Not an error, but worth noting:** §1's specification table reproduces resolution and accuracy
+   from vendor sources and **does not** carry the 0.0005" repeatability figure that investigation §1
+   lists. That is independent support for §6.3's suspicion that the 0.0005" number is a
+   transcription error.
+
+### 10.5 The one bench observation this research does not explain — and a lead it hands us
+
+Nothing in any of F7/F10/F11–F13 predicts the project's central finding: **DATA button held +
+edges on pin 2 or pin 3 → pin 1 asserts a long (≥25 ms) low.** None of the surveyed protocols has a
+device-driven "data ready" line, and none has a button in the wire protocol at all.
+
+But §5.3 contains a lead nobody has followed. Describing the reference Digimatic host circuit, it
+notes: *"A second 10 kΩ biases the cable's 'data' pushbutton."* In that design the **data button is
+electrically part of the port interface**, not a private input to the tool's own MCU. If iGaging
+carried that idea over, the 35-065's DATA button may be wired — possibly via the `J10–J81` jumper
+matrix — into the connector-pin network rather than being purely internal.
+
+That reframes the observed behaviour: pin 1 may not be a protocol signal at all, but the
+button/strobe line, which would explain why it is reading-independent (§1.1 caveats aside) and why
+no clocking scheme has ever shifted data out of it. **Ringing the DATA button's contacts to Q1/Q2
+and to connector pins 1/2/3 is a DMM-only test** and now joins §5.1 at the top of the queue.
+
+### 10.6 Housekeeping
+
+- **Two protocol-research files with near-identical names.** `PROTOCOL_RESEARCH.md` (2026-07-17) and
+  `igaging_protcol_research.md` (2026-07-26) overlap heavily and **disagree** on sign encoding
+  (one's vs two's), on DATA-line pull direction (pull-*down* vs pull-*up*/open-drain), and on
+  whether a REQ line exists. The newer one is better on all three. Recommend either deleting
+  `PROTOCOL_RESEARCH.md` or reducing it to a stub pointing at the new file; at minimum, banner it.
+- **The filename typo (`protcol`) is deliberate** per the doc's own header note. Fine, but combined
+  with the near-duplicate name it makes tab-completion a coin flip. Worth reconsidering.
+- **Add it to the file table** in `BRINGUP_PLAN.md` §8, which lists every other document.
+
+### 10.7 Net effect on this review
+
+Nothing in §§1–4 is weakened. Three things get stronger:
+
+- The damage hypothesis (§4) gains a named failure mode (F2).
+- The "exhausted" claims (§3.1) get worse: two more never-varied stimulus parameters surface
+  (20 % duty, §5.5a; 100 kΩ pull-ups, §5.7a) — both specified by the reference implementation, both
+  never delivered by any test in this project.
+- The §11.13 Digimatic branch is largely closed by a measurement taken a month ago (§10.3),
+  which means `BRINGUP_PLAN.md`'s "try this first" banner is pointing at a dead end.
+
+And one thing gets cheaper: F8 lets `igaging_decode.py` pin `SIGN_ENCODING = "twos"` now, and F9
+gives Phase C a two-way discrimination target instead of an open-ended fit.
