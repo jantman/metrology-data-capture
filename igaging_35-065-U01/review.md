@@ -459,10 +459,26 @@ port designed to talk to exactly one proprietary cable looks like.
 
 ### 4.3 Cheap checks
 
-**Closed-case, do now — no reason to wait.** Diode-test pins 1/2/3 to GND **through the breakout**,
-with the battery out, and compare the three readings against each other. A blown clamp shows as a
-shorted or missing diode drop. **Asymmetry between pins 2 and 3 is the thing to look for** — they
-are supposed to be symmetric inputs, so they should read alike. This needs no board access at all.
+**RUN 2026-07-26 — partial result. See `BENCH_LOG.md` §11.17.** Diode-tested pins 1/2/3 against
+GND through the breakout, battery out, both directions. **Every signal-pin reading came back OL
+(open)**; only the pin 4↔pin 5 sanity step showed its known short (0.3 mV), confirming the leads
+and breakout were good.
+
+- **Established:** no short, and no path below roughly 3 kΩ, from any signal pin to ground in
+  either direction ⇒ **the common over-voltage failure mode (a clamp fused short) is ruled out.**
+- **Not established:** with everything open there is no working-clamp baseline, so the intended
+  pin-2-vs-pin-3 symmetry comparison **never ran**, and the test cannot tell healthy protection
+  from destroyed protection. Damage is *partially* addressed, not settled.
+- ⚠ **The script's own verdict was wrong and is retracted.** It printed "MATCHED → no evidence of
+  over-drive damage" because an overload returns a ~1e9 sentinel, so `1e9 − 1e9 = 0.0` read as a
+  perfect match. Fixed; `diode_test.py` now guards every comparison against the sentinel.
+- **Pin 1 open in both directions** is what an open-collector NPN with a floating base does — mildly
+  *consistent with* §5.1a's inferred topology rather than against it.
+
+**Still to do, closed-case:** re-run as `python diode_test.py --mode resistance`. Resistance mode
+measures into the MΩ range instead of stopping at the diode-test compliance voltage, so it can see
+a partial/leaky path that reads OL here — and it would give the pin-2-vs-pin-3 comparison an actual
+number instead of two sentinels.
 
 **Deferred to the batched opening (§5.1):** comparing Q1 and Q2 in-circuit, and diode-testing the
 pins against the *internal rail* rather than ground.

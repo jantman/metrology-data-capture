@@ -84,9 +84,10 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
 
 ### [closed-case] — do all of these first
 
-1. **DMM through the breakout, battery out:** diode-test pins 1/2/3 to GND and compare the three.
-   **Asymmetry between pins 2 and 3 is the thing to look for** — they should read alike, being
-   symmetric inputs. Checks for over-drive damage without opening anything.
+1. ~~**DMM through the breakout, battery out:** diode-test pins 1/2/3 to GND.~~ **DONE
+   2026-07-26** — all open; shorted clamps ruled out, symmetry comparison did not run
+   (`BENCH_LOG.md` §11.17). **Remaining half:** `python diode_test.py --mode resistance` to catch a
+   leaky path that diode mode reports as OL.
 2. **Estimate the internal rail without opening the mic:** hold the DATA button, clock pin 2, and
    **ramp the drive amplitude down** (3.0 → 2.5 → 2.0 → 1.5 → 1.2 → 1.0 → 0.8 V) until pin 1 stops
    strobing. A CMOS input threshold sits near **0.5 × V<sub>DD</sub>**, so a cut-off near 1.5 V
@@ -152,11 +153,16 @@ timed handshake nobody has guessed.**
 Caveat worth keeping: "the mic reads correctly" tests the LCD and encoder, **not** the port. The
 real port health check is the §11.15 pin-1 response — and it passes.
 
-**Cheap confirmation, [closed-case]:** diode-test pins 1/2/3 to GND *through the breakout* with the
-battery out and compare them (next-experiments step 1) — asymmetry between pins 2 and 3 is the
-thing to look for, since they should be symmetric inputs. Testing against the internal rail, and
-comparing Q1/Q2 in-circuit, wait for the batched opening. A second micrometer is *not* worth buying
-for this — it controls for damage without revealing the protocol.
+**Checked 2026-07-26 (closed-case diode test, `BENCH_LOG.md` §11.17) — partial:** every signal pin
+read **OL (open)** to ground in both directions, with the pin 4↔pin 5 sanity short confirming good
+leads. That **rules out a clamp fused short** — the common over-voltage failure mode — on all three
+pins. But with everything open there was no working-clamp baseline, so the intended pin-2-vs-pin-3
+symmetry comparison never ran, and the test cannot distinguish healthy protection from destroyed
+protection. **Still to do:** `python diode_test.py --mode resistance`, which measures into the MΩ
+range and can see a leaky path that reads OL in diode mode.
+
+A second micrometer is *not* worth buying for this — it controls for damage without revealing the
+protocol.
 
 ## Files
 

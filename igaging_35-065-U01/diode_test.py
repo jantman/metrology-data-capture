@@ -79,12 +79,19 @@ def ask(prompt):
     return ans
 
 
+# Overload sentinel from the meter (~1e9). In diode mode a real reading is a forward drop of a
+# volt or two; in resistance mode a real reading can legitimately be megohms, so the "is this an
+# overload?" cut differs per mode. Set by main() before any formatting happens.
+OL_CUT = 3.0
+UNIT = "V"
+
+
 def fmt(v):
     if v is None:
         return "skipped"
     if v == "not run":
         return "not run"
-    return "OL (open)" if abs(v) > 3.0 else f"{v:.4f} V"
+    return "OL (open)" if abs(v) > OL_CUT else f"{v:.4f} {UNIT}"
 
 
 def main():
@@ -92,7 +99,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-confirm", action="store_true",
                     help="don't ask for the battery-out confirmation (use if already verified)")
+    ap.add_argument("--mode", choices=("diode", "resistance"), default="diode",
+                    help="diode: forward-drop test (default). resistance: measures into the MOhm "
+                         "range, so it sees a partial/leaky path that reads OL in diode mode — "
+                         "use this as the follow-up when diode mode comes back all-open.")
     args = ap.parse_args()
+
+    global OL_CUT, UNIT
+    OL_CUT = 3.0 if args.mode == "diode" else 5e7   # 50 MOhm: above this the meter is open
+    UNIT = "V" if args.mode == "diode" else "Ohm"
 
     os.makedirs(OUTDIR, exist_ok=True)
     _log_fh = open(LOG_PATH, "w")
@@ -101,7 +116,7 @@ def main():
     results = {}
     try:
         log("=" * 72)
-        log(f"iGaging 35-065-U01 — closed-case diode test (battery OUT, via breakout)")
+        log(f"iGaging 35-065-U01 — closed-case port health check ({args.mode} mode), battery OUT, via breakout")
         log(f"started {stamp}")
         log("=" * 72)
 
@@ -114,8 +129,9 @@ def main():
                 log("aborted — remove the battery first.")
                 return
 
-        d.set_function("DIODE")
-        log(f"meter set to DIODE mode (state: {d.state()})\n")
+        func = "DIODE" if args.mode == "diode" else "RESISTANCE"
+        d.set_function(func)
+        log(f"meter set to {func} mode (state: {d.state()})\n")
 
         for key, red, black, why in STEPS:
             log(f"--- {key} ---")
@@ -130,7 +146,7 @@ def main():
                 results[key] = None
                 log("    skipped\n")
                 continue
-            val, unit = d.read_settled(expect_function="DIODE")
+            val, unit = d.read_settled(expect_function=func)
             results[key] = val
             log(f"    => {fmt(val)}   (raw {val!r} {unit})\n")
 
@@ -138,9 +154,43 @@ def main():
         for key, _, _, _ in STEPS:
             log(f"  {key:12} {fmt(results.get(key, 'not run'))}")
 
+        p1 = results.get("GND->pin1")
         p2, p3 = results.get("GND->pin2"), results.get("GND->pin3")
         log("\n==== VERDICT ====")
-        if isinstance(p2, float) and isinstance(p3, float):
+
+        # NB: an overload reads as a ~1e9 sentinel, NOT a voltage. Comparing two sentinels
+        # numerically yields a delta of 0.0 and a bogus "MATCHED" — guard every comparison.
+        def is_ol(v):
+            return isinstance(v, float) and abs(v) > OL_CUT
+
+        def is_num(v):
+            return isinstance(v, float) and abs(v) <= OL_CUT
+
+        signal_reads = {k: v for k, v in results.items() if k != "pin4->pin5"}
+        measured = [v for v in signal_reads.values() if is_num(v)]
+
+        short_cut = 0.05 if args.mode == "diode" else 1000.0   # <1k Ohm is a real leakage path
+        shorts = [k for k, v in signal_reads.items() if is_num(v) and abs(v) < short_cut]
+        if shorts:
+            log(f"  *** NEAR-SHORT on {shorts} -> blown clamp; real damage. ***")
+        else:
+            log("  No shorts and no low-resistance path from any signal pin to ground, in "
+                "either direction.")
+            log("  => rules out the COMMON over-voltage failure mode (a clamp fused short).")
+
+        if not measured and all(is_ol(v) for v in signal_reads.values()):
+            log("\n  ALL signal-pin readings are OPEN (OL) in both directions.")
+            log("  *** The pin2-vs-pin3 symmetry comparison therefore DID NOT RUN. *** There is")
+            log("  no working-clamp baseline to compare against, so this test CANNOT distinguish")
+            log("  healthy protection structures from destroyed ones — only shorted ones (above).")
+            log("  Treat the damage question as PARTIALLY addressed, not settled.")
+            log("  Follow-up that would tighten it: re-run in RESISTANCE mode (--mode resistance),")
+            log("  which measures into the MOhm range instead of stopping at the diode-test")
+            log("  compliance voltage, and can see a partial/leaky path that reads OL here.")
+            log("\n  Note on pin 1: open in BOTH directions is exactly what an open-collector NPN")
+            log("  with a floating base does (battery out => base pulled nowhere). That is mildly")
+            log("  CONSISTENT with the inferred topology in review.md §5.1a, not against it.")
+        elif is_num(p2) and is_num(p3):
             delta = abs(p2 - p3)
             log(f"  pin2 vs pin3 forward drop: {p2:.4f} V vs {p3:.4f} V  "
                 f"(delta {delta * 1000:.1f} mV)")
@@ -150,23 +200,21 @@ def main():
             else:
                 log("  *** MISMATCHED (>30 mV) -> this is the damage signature. Re-seat the "
                     "probes and repeat before believing it; if it holds, revisit review.md §4. ***")
+            if is_num(p1):
+                log(f"  pin1 forward drop: {p1:.4f} V (expected to DIFFER from the inputs — it "
+                    f"should land on a transistor collector, not an MCU pin)")
+                if abs(p1 - p2) < 0.030:
+                    log("  NOTE: pin 1 reads like the inputs — that would undercut the inferred "
+                        "topology in review.md §5.1a. Worth recording either way.")
+            elif is_ol(p1):
+                log("  pin1: open, while the inputs conduct -> consistent with pin 1 being a "
+                    "transistor collector rather than an MCU pin (review.md §5.1a).")
+        elif is_ol(p2) != is_ol(p3):
+            log(f"  *** ASYMMETRY: pin2 {fmt(p2)} vs pin3 {fmt(p3)} — one conducts and the other")
+            log("  does not, on pins that are supposed to be symmetric inputs. Re-seat the probes")
+            log("  and repeat; if it holds, this is the damage signature (review.md §4). ***")
         else:
             log("  pins 2/3 not both measured — inconclusive.")
-
-        p1 = results.get("GND->pin1")
-        if isinstance(p1, float) and isinstance(p2, float):
-            log(f"  pin1 forward drop: {fmt(p1)}  (expected to DIFFER from pins 2/3 — it should "
-                f"land on a transistor collector, not an MCU pin)")
-            if abs(p1 - p2) < 0.030:
-                log("  NOTE: pin 1 reads like the inputs. That is unexpected and would undercut "
-                    "the inferred topology in review.md §5.1a — worth recording either way.")
-
-        shorts = [k for k, v in results.items()
-                  if isinstance(v, float) and abs(v) < 0.05 and k != "pin4->pin5"]
-        if shorts:
-            log(f"  *** NEAR-SHORT on {shorts} -> blown clamp; real damage. ***")
-        else:
-            log("  No near-shorts on pins 1/2/3 in either direction.")
 
     except KeyboardInterrupt:
         log("\n[interrupted by user — partial results above]")

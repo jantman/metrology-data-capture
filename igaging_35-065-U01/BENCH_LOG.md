@@ -731,6 +731,56 @@ cable handshake as a reference.
 **Photo index** (`board_teardown/`): `PICT0001` exterior (TwinForCe/USB Mic); `PICT0011` full
 battery-side board; `PICT0022/0023/0028/0037` connector + jumper matrix + Q1/Q2 close-ups.
 
+### 11.17 Closed-case diode test — no shorts, but the intended comparison did not run (2026-07-26)
+
+First test of the post-over-drive damage question (`review.md` §4), done entirely through the
+Micro-USB breakout with the **case closed and the battery out** — no board access, no risk to the
+FPC repair. OWON XDM1041 in diode mode via `dmm_lib.py`; full transcript in
+`findings/diode_test_latest.txt`.
+
+| Probe RED → BLACK | Reading |
+|---|---|
+| pin 4 → pin 5 | **0.0003 V** (known short — leads and breakout verified good) |
+| pin 4 (GND) → pin 1 | **OL (open)** |
+| pin 4 (GND) → pin 2 | **OL (open)** |
+| pin 4 (GND) → pin 3 | **OL (open)** |
+| pin 1 → pin 4 (GND) | **OL (open)** |
+| pin 2 → pin 4 (GND) | **OL (open)** |
+| pin 3 → pin 4 (GND) | **OL (open)** |
+
+**What this establishes:** **no short and no low-resistance path from any signal pin to ground, in
+either direction.** At the meter's diode-mode compliance (~1 mA / ~3 V open circuit) an OL means
+roughly **> 3 kΩ**. That rules out the *most common* over-voltage failure mode — an ESD clamp that
+fuses into a short — on all three signal pins. It is a real, if partial, negative for damage.
+
+**What it does NOT establish — and the script initially claimed otherwise.** The run printed
+*"MATCHED → no asymmetry between the symmetric inputs; no evidence of over-drive damage."* **That
+verdict was a bug and is retracted.** An overload returns a ~1e9 sentinel rather than a voltage, so
+comparing pin 2 against pin 3 computed `1e9 − 1e9 = 0.0` and declared a perfect match. Both pins
+were simply *open*; the comparison never ran. The same bug produced the note that pin 1 "reads like
+the inputs," which was likewise sentinel-vs-sentinel.
+
+With no working-clamp reading anywhere, there is **no baseline to compare against**, so this test
+cannot distinguish healthy protection structures from destroyed ones. The damage question is
+**partially addressed, not settled**. (`diode_test.py` now guards every comparison against the
+sentinel and says so explicitly when everything reads open.)
+
+**On pin 1 specifically:** open in *both* directions is exactly what an open-collector NPN with a
+floating base does — battery out means the 330 kΩ base resistor pulls to an unpowered node, so the
+transistor is off in both polarities. That is mildly **consistent with** the inferred topology
+(`review.md` §5.1a), not against it.
+
+**One observation worth keeping:** pins 2/3 reading fully open to ground is a *little* surprising
+for directly-connected CMOS inputs, which usually show a substrate diode from GND to the pin. It
+may mean something sits in series (a resistor, or the `J10–J81` matrix routing), or simply that an
+unpowered die presents no return path. Not a conclusion — but it is weak evidence against "pins 2/3
+land straight on MCU inputs," which is one of the §5.1a inferences.
+
+**Follow-up that would tighten this** (still closed-case): re-run in **resistance mode** —
+`python diode_test.py --mode resistance` — which measures into the MΩ range instead of stopping at
+the diode-test compliance voltage, and can therefore see a partial or leaky path that reads OL
+here. That would also give the pin-2-vs-pin-3 comparison an actual number to work with.
+
 ---
 
 ## Remaining phases (carried over from the retired `BRINGUP_PLAN.md`)
