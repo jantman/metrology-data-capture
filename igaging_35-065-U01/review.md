@@ -993,6 +993,13 @@ result rather than listing both.
 
 ### 10.5 The one bench observation this research does not explain — and a lead it hands us
 
+> **✅ THE LEAD PAID OFF (2026-07-26, `BENCH_LOG.md` §11.19).** The hypothesis below — that
+> iGaging carried over the reference design's wiring of the data pushbutton into the port
+> interface — is **confirmed**. With the battery out, the DMM's continuity buzzer sounds for
+> exactly as long as the DATA button is held: **pin 1 is the button's switch contact to ground**,
+> not a device output. The mic has never driven any connector pin. This retires the whole
+> "pin 1 = data-ready strobe" line of enquiry and reduces the real interface to pins 2 and 3.
+
 Nothing in any of F7/F10/F11–F13 predicts the project's central finding: **DATA button held +
 edges on pin 2 or pin 3 → pin 1 asserts a long (≥25 ms) low.** None of the surveyed protocols has a
 device-driven "data ready" line, and none has a button in the wire protocol at all.

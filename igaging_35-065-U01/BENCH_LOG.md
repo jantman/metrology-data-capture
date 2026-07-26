@@ -526,6 +526,18 @@ real cable).
 
 ### 11.14 BREAKTHROUGH — the DATA button triggers a device response (2026-07-26)
 
+> ## ⚠⚠ SUPERSEDED — pin 1 is the DATA BUTTON'S SWITCH CONTACT, not a device output (§11.19)
+>
+> **The mic never drove anything.** With the **battery OUT**, the DMM's continuity buzzer sounds
+> for exactly as long as the DATA button is held — so pin 1 conducts to ground *unpowered*, which
+> a transistor cannot do. Pin 1 is a mechanical switch to ground, brought out to the connector for
+> the host cable's benefit.
+>
+> Everything in §11.14–§11.18 about pin 1 is therefore **characterisation of a pushbutton**, not of
+> a device response. The measurements are all still valid; the interpretation is not.
+> The title is wrong: there was no device response. Pressing the button closed a switch.
+
+
 **After two-plus sessions of total silence, the mic finally drives a connector pin.** The
 trigger was the on-body **DATA button** — ~~the one interaction we'd never combined with the
 pull-up rig~~.
@@ -574,6 +586,19 @@ pin-3 drive); (2) capture the **whole ~10 ms event** at high resolution with a *
 
 ### 11.15 Clock-sweep WITH the button — pin roles nailed down (2026-07-26)
 
+> ## ⚠⚠ SUPERSEDED — pin 1 is the DATA BUTTON'S SWITCH CONTACT, not a device output (§11.19)
+>
+> **The mic never drove anything.** With the **battery OUT**, the DMM's continuity buzzer sounds
+> for exactly as long as the DATA button is held — so pin 1 conducts to ground *unpowered*, which
+> a transistor cannot do. Pin 1 is a mechanical switch to ground, brought out to the connector for
+> the host cable's benefit.
+>
+> Everything in §11.14–§11.18 about pin 1 is therefore **characterisation of a pushbutton**, not of
+> a device response. The measurements are all still valid; the interpretation is not.
+> "pin 1 = the mic's sole OUTPUT" is wrong in kind. Driving pin 1 did nothing because you
+> were fighting a closed switch. **Pins 2 and 3 remain the only real interface.**
+
+
 > ## ⚠ PARTLY RETRACTED — the trigger condition below is wrong (see §11.18)
 >
 > **"Both are required" is false. The DATA button ALONE triggers pin 1's strobe** — no clock, no
@@ -616,6 +641,19 @@ fixed (→ pure strobe). If coordinated 2-input driving still yields no bits, th
 cable sniff is the definitive decode reference.
 
 ### 11.16 Two-input handshake — exhausted; blind decode is at its limit (2026-07-26)
+
+> ## ⚠⚠ SUPERSEDED — pin 1 is the DATA BUTTON'S SWITCH CONTACT, not a device output (§11.19)
+>
+> **The mic never drove anything.** With the **battery OUT**, the DMM's continuity buzzer sounds
+> for exactly as long as the DATA button is held — so pin 1 conducts to ground *unpowered*, which
+> a transistor cannot do. Pin 1 is a mechanical switch to ground, brought out to the connector for
+> the host cable's benefit.
+>
+> Everything in §11.14–§11.18 about pin 1 is therefore **characterisation of a pushbutton**, not of
+> a device response. The measurements are all still valid; the interpretation is not.
+> "pin 1 carries no measurement information" was the right conclusion for the wrong reason —
+> it is a button. The reading-independence follows trivially.
+
 
 Drove BOTH inputs together (`two_input_capture.py`: AWG CH1 = CLK square on one input, CH2 = REQ
 DC-held on the other) + DATA button, watching pin 1:
@@ -902,6 +940,79 @@ the host to clock it. Every clocking attempt in this project has driven a free-r
 2. **Then clock a burst INSIDE that window**, gated from pin 1's falling edge, at the documented
    20 % duty / 9 kHz (`review.md` §5.5a, §5.7). This is the highest-value untested experiment in
    the project and both steps are closed-case on the existing rig.
+
+### 11.19 pin 1 is the DATA BUTTON — the mic has never driven anything (2026-07-26)
+
+**Method: the simplest possible.** Battery **OUT**, DMM in continuity mode, leads on pin 1 and
+pin 4. Press the DATA button. **The continuity buzzer sounds for exactly as long as the button is
+held** — verified over a 16-second hold.
+
+**A mechanical switch conducts unpowered. A transistor cannot.** Pin 1 is therefore the DATA
+button's contact, wired straight to the connector for the host cable to sense. It is not an
+output, and it never was.
+
+#### What this overturns
+
+| Claim | Status |
+|---|---|
+| §11.14 "BREAKTHROUGH — the mic finally drives a connector pin" | **No device response ever occurred.** A button closed a switch |
+| §11.15 "pin 1 = the mic's sole OUTPUT" | **Wrong in kind.** Pin 1 is a switch to ground |
+| §11.15 "trigger = button AND edges on pin 2/3" | Already retracted in §11.18; the clock was always irrelevant |
+| §11.16 "pin 1 carries no measurement information" | Right conclusion, wrong reason — it is a button |
+| §11.18 ~155 ms tap / >3.2 s hold, low at ~0 V | Measurements stand; they describe **contact closure** |
+
+**The mic has never been observed to drive any connector pin.** Every apparent device response
+since 2026-07-26 was a pushbutton.
+
+#### What it explains, all at once
+
+The ~0 V low (a closed contact, not V<sub>CE(sat)</sub>); tracking the button exactly; the
+reading-independence of §11.16; why nothing ever shifts out of pin 1; and why driving pin 1 did
+nothing in §11.15 — you were fighting a closed switch.
+
+It also **vindicates the `review.md` §10.5 lead** precisely. That noted, from the reference
+Digimatic host design, that *"a second 10 kΩ biases the cable's 'data' pushbutton"* — i.e. the
+button is part of the port interface rather than a private input to the tool. It is, on this unit.
+
+#### The corrected model, and why it is encouraging
+
+```
+   pin 1  = DATA button contact   (mic -> host: "the user wants a reading now")
+   pin 2  = ?  |  the actual 2-wire data interface, still undecoded
+   pin 3  = ?  |  most likely CLK + DATA
+   pin 4/5 = GND
+```
+
+**Two signal wires plus a button is exactly the shape of the iGaging 21-bit protocol** — host
+drives CLK, mic returns DATA, and the button tells the cable's MCU when to perform a read. That is
+the original §3 hypothesis, and it now has a clean pin budget. (It also argues *against* Digimatic,
+which needs REQ + CK + DATA = three signals; only two remain.)
+
+#### Why the earlier clocking attempts prove less than they appeared to
+
+Every "clock pin 2, watch pin 3" result is weaker than recorded:
+
+- §11.12 Test 2 used the **VMIN polling loop** (~4–12 % wall-clock coverage) — the defect behind
+  three separate false negatives already (`review.md` §1.3).
+- §11.16's armed captures triggered on **pin 1** — i.e. on the button — not on the data pin, and
+  only ever sampled a fixed window around the press.
+
+**No test has ever armed a trigger on a data pin during a clocked read.** That is the gap.
+
+#### Next: the experiment is now fully automatable
+
+Because pin 1 is a switch to ground, a **button press can be synthesised electrically** — just pull
+pin 1 low. No human in the loop, so the run can be long, repeated, and unattended:
+
+```
+   AWG CH1 -> 1k -> pin 1     hold LOW = "button held"
+   AWG CH2 -> 1k -> pin 2     the clock
+   scope   -> pin 3           armed trigger on a FALLING edge = the mic driving DATA
+```
+
+Then sweep clock rate, duty (the documented **20 %** has never been delivered — `review.md`
+§5.5a), burst framing, and the pin 2/pin 3 role swap, watching for pin 3 to be pulled low. This is
+the first properly-instrumented search of the actual interface.
 
 ---
 

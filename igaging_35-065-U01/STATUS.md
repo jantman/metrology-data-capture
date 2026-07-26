@@ -4,8 +4,13 @@
 
 ## Where this stands
 
-The connector is **mapped**, the mic **responds** to stimulus, but the **measurement data has not
-been decoded** and has never been observed on any pin.
+**The mic has never been observed to drive any connector pin.** Every apparent "device response"
+recorded on 2026-07-26 was the **DATA button's switch contact** on pin 1 (§11.19, confirmed with
+the battery out — a switch conducts unpowered, a transistor cannot).
+
+The real interface is **two wires, pins 2 and 3, still undecoded** — plus the button on pin 1 as a
+"user wants a reading now" signal to the host. That shape matches the **iGaging 21-bit protocol**
+(host drives CLK, mic returns DATA) and argues against Digimatic, which needs three signals.
 
 ## ⚠ Hardware access constraints — read first
 
@@ -35,9 +40,9 @@ evidence is empirical.
 | | |
 |---|---|
 | **Pins 4 and 5** | **GND** — both, tied together and to battery negative |
-| **Pin 1** | The mic's **only output**. Asserts a LOW of **≥25 ms** (true length still unmeasured) at **~0 V** — a saturated-NPN low, not the "−0.7 V" once reported (§11.18) |
-| **Pins 2 and 3** | **Inputs**, and symmetric — driving *either* works |
-| **Trigger** | **The DATA button ALONE.** No clock, no input edges (§11.18 — corrects §11.15's "both required") |
+| **Pin 1** | The **DATA button's switch contact** to ground — NOT a device output (§11.19). Closed while held: ~155 ms on a tap, indefinitely on a hold |
+| **Pins 2 and 3** | The **actual data interface**, still undecoded. Accept driven edges; never yet seen to drive |
+| **The mic** | Has **never** been observed to drive any connector pin |
 | **Supply** | Self-powered from the CR2032. **No rail on the connector**; pin 1 drew 0.0 mA when fed 3 V |
 | **Idle** | All three signal pins float (~−0.02 V); no internal pull-ups |
 | **Outputs** | Open-collector (Q1/Q2 = MMBT3904 + 330 kΩ base) → external pull-**ups** required |
@@ -54,7 +59,17 @@ evidence is empirical.
 - Pin 1 as a VDD input that powers the interface.
 - Clock **rate** as the missing factor — pin 1's response is identical from 10 Hz to 9 kHz.
 
-## Leading open hypothesis: Mitutoyo Digimatic
+## Leading hypothesis: the iGaging 21-bit protocol on pins 2/3
+
+Two signal wires plus a button is exactly its shape — host drives CLK, mic returns DATA on the
+other, and the button tells the host's MCU when to read. This is the original §3 hypothesis and it
+now has a clean pin budget.
+
+**This displaces Digimatic**, which needs REQ + CK + DATA = three signals; with pin 1 spent on the
+button, only two remain. (The `review.md` §10.3 argument for Digimatic rested on a three-signal
+count that §11.19 has now spent.)
+
+## Superseded hypothesis: Mitutoyo Digimatic
 
 *(An earlier revision of this file listed Digimatic as ruled out. **That was an error** — it leaned
 on a generic pin mapping already known to be wrong for this unit. Retracted; see `review.md`
@@ -92,15 +107,20 @@ on a generic pin mapping already known to be wrong for this unit. Retracted; see
 1. ~~**DMM through the breakout, battery out:** port health check.~~ **DONE 2026-07-26**, both
    passes (`BENCH_LOG.md` §11.17/§11.17b). Damage ruled out; three separate signal nets confirmed;
    pins 4/5 verified interchangeable; pin 1 shown electrically distinct from pins 2/3.
-2. **Capture the pin-1 strobe END — do this next.** Trigger on its falling edge with the trigger
-   at the far **left** of the record and a window long enough to catch the rising edge. Every
-   capture so far puts the trigger at centre screen, so the low always runs to the end of the
-   record and "~25 ms" is a floor, not a measurement (`review.md` §1.2). We need the real window
-   length before step 3 can be timed.
-3. **Clock a burst INSIDE the strobe window**, gated from pin 1's falling edge, at the documented
-   **20 % duty / 9 kHz** (22 µs high / 89 µs low, idle LOW). Every clocking attempt to date has
-   been free-running and *asynchronous* to the window. If pin 1 is a data-ready line, this is the
-   experiment that matters — **highest value remaining** (`review.md` §5.5a, §5.7).
+2. **The properly-instrumented interface search — now FULLY AUTOMATABLE.** Because pin 1 is a
+   switch, a button press can be synthesised by pulling pin 1 low, so no human is needed and runs
+   can be long, repeated and unattended:
+   ```
+   AWG CH1 -> 1k -> pin 1     hold LOW = "button held"
+   AWG CH2 -> 1k -> pin 2     the clock
+   scope   -> pin 3           armed trigger on a FALLING edge = the mic driving DATA
+   ```
+   **No test has ever armed a trigger on a data pin during a clocked read** — §11.12 used the
+   broken VMIN polling loop and §11.16 always triggered on pin 1, i.e. on the button. Sweep clock
+   rate, **20 % duty** (never once delivered — `review.md` §5.5a), burst framing, and the pin 2 /
+   pin 3 role swap.
+3. ~~Capture the pin-1 strobe end~~ **DONE** (§11.18/§11.19): ~155 ms on a tap, indefinite on a
+   hold — it is a button contact, so there is nothing further to learn from it.
 4. **~~Estimate the internal rail by sweeping the input threshold~~ — DOESN'T WORK.** Attempted
    2026-07-26 and **void**: the response is not gated on the driven input at all, so ramping the
    drive amplitude proves nothing (§11.18). The rail remains unmeasured; a genuine closed-case
