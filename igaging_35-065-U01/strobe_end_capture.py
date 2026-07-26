@@ -69,8 +69,38 @@ def find_pulse(vals, hi_thresh=2.0, lo_thresh=1.0):
     return fall, rise
 
 
+def wait_for_idle(scope, args, timeout=30.0):
+    """Block until pin 1 is back at the rail, i.e. the button is genuinely released.
+
+    Arming while the button is still held is a real failure mode: the trigger is a FALLING
+    edge, so if pin 1 is already low nothing fires until the next press — the capture silently
+    stalls, or worse, catches a release/press boundary and measures a fragment. Rather than
+    guessing at a delay, verify the actual line state before every arm.
+    """
+    scope.write(":TRIGger:SWEep AUTO"); scope.write(":RUN")
+    scope.write(":TIMebase:MAIN:SCALe 0.001")
+    t0 = time.time()
+    warned = False
+    while time.time() - t0 < timeout:
+        v = scope.measure_item(PIN_CHANS[1], "VAVG")
+        if v > args.rail * 0.8:
+            if warned:
+                print("      ...released, arming.")
+            return True
+        if not warned:
+            print(f"      pin 1 still LOW ({v:+.2f} V) — RELEASE THE BUTTON before the next "
+                  f"capture...", flush=True)
+            warned = True
+        time.sleep(0.3)
+    print(f"      !! pin 1 never returned high within {timeout:.0f}s — is the button stuck, or "
+          f"is the mic asleep?")
+    return False
+
+
 def capture_one(scope, args, window_s, label):
     """Arm with the trigger at the far left, wait for a press, return a result dict."""
+    wait_for_idle(scope, args)
+    time.sleep(args.settle)
     tb = window_s / DIVISIONS
     # Positive offset moves the trigger LEFT; ~5 divisions puts it at the screen edge so the
     # record is almost entirely post-trigger.
@@ -99,6 +129,9 @@ def main():
                     help="divisions to shift the trigger left (10-div screen; ~4.6 keeps the "
                          "pre-trigger edge just visible)")
     ap.add_argument("--window", type=float, default=25.0, help="seconds to wait per press")
+    ap.add_argument("--settle", type=float, default=1.0,
+                    help="extra pause after pin 1 goes idle, before arming (gives you a moment "
+                         "to get ready for the next press)")
     ap.add_argument("--thresh", type=float, default=1.5)
     ap.add_argument("--rail", type=float, default=3.0)
     ap.add_argument("--ilim", type=float, default=0.02)
@@ -122,11 +155,14 @@ def main():
                            ("HOLD", "PRESS AND HOLD DOWN for ~5 seconds")):
             print(f"\n=== phase {phase}: {how} ===")
             for rep in range(1, args.reps + 1):
-                window = args.start_ms / 1e3
+                # HOLD is known to exceed 3.2 s (2026-07-26), so starting at --start-ms would
+                # waste a button press per doubling. Start it near the ceiling instead.
+                window = (args.start_ms if phase == "TAP" else args.max_ms) / 1e3
                 while True:
                     r = capture_one(scope, args, window, f"{phase} {rep}/{args.reps}")
                     if r is None:
-                        print("      no trigger.")
+                        print("      no trigger in the window.")
+                        results[phase].append(None)
                         break
                     if r["fall"] is None:
                         print("      triggered but no falling edge in the record — odd; skipping.")

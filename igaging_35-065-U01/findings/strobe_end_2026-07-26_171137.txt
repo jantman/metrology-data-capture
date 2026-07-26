@@ -1,0 +1,6 @@
+pin-1 strobe end-to-end, trigger at far left, nothing driven
+2026-07-26_171137
+
+TAP 1: 158.000 ms
+TAP 2: 152.800 ms
+HOLD 1: not ended in window
