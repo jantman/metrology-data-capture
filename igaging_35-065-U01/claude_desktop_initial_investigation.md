@@ -732,6 +732,12 @@ pin 2 at 9 kHz, single-input clocking pin 3 at 9 kHz, and two-input (CLK pin 3 @
 — **all still just the strobe.** So the clock *rate* is confirmed NOT the missing factor; pin 1's
 response is rate-independent.
 
+**Reading-dependence checked (decisive):** captured pin 1's strobe at **0.065 mm** vs **24.698 mm**
+(wildly different readings), 50 ms window, same button tap. The two pin-1 waveforms are
+**byte-for-byte IDENTICAL** (0/1000 samples differ; both a ~25 ms low, 1 edge). **pin 1 carries no
+measurement information — it is a pure fixed "data-ready" strobe**, not the data. This conclusively
+rules out the last hypothesis that pin 1 might itself encode the value (e.g., pulse-width/timing).
+
 **CONCLUSION — blind reverse-engineering has reached its limit on this unit.** The interface is fully
 mapped (pin 1 = output/data-ready strobe; pin 2, pin 3 = inputs; trigger = DATA button + edges on an
 input), but the mic only shifts the actual reading in response to a specific **timed READ HANDSHAKE**
