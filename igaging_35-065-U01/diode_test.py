@@ -40,17 +40,38 @@ from dmm_lib import DMM
 OUTDIR = "findings"
 LOG_PATH = os.path.join(OUTDIR, "diode_test_latest.txt")
 
-# (key, red lead, black lead, why)
-STEPS = [
-    ("pin4->pin5", "pin 4 (GND)", "pin 5 (GND)",
-     "sanity: known short, should read ~0 / beep. If not, the breakout or leads are bad."),
-    ("GND->pin1", "pin 4 (GND)", "pin 1", "forward clamp, pin 1 (the mic's output)"),
-    ("GND->pin2", "pin 4 (GND)", "pin 2", "forward clamp, pin 2 (input)"),
-    ("GND->pin3", "pin 4 (GND)", "pin 3", "forward clamp, pin 3 (input)  <-- compare with pin 2"),
-    ("pin1->GND", "pin 1", "pin 4 (GND)", "reverse, pin 1 — expect high/OL"),
-    ("pin2->GND", "pin 2", "pin 4 (GND)", "reverse, pin 2 — expect high/OL"),
-    ("pin3->GND", "pin 3", "pin 4 (GND)", "reverse, pin 3 — expect high/OL"),
-]
+def build_steps(refs):
+    """Probe placements, ordered so the highest-value ones come first (you can quit early).
+
+    refs: which ground pins to reference against, e.g. (4, 5). Referencing BOTH cross-checks
+    the "pins 4 and 5 are the same node" assumption instead of taking it on faith.
+    """
+    steps = [("pin4-pin5", "pin 4 (GND)", "pin 5 (GND)",
+              "ground integrity: known short. Proves current goes out pin 4, through the board, "
+              "back pin 5 — i.e. BOTH ground pins are really contacting. If this is open, "
+              "everything after it is meaningless.")]
+
+    # HIGHEST VALUE, never tested before: are the signal pins separate nets at all?
+    # If pins 2 and 3 are shorted, then §11.15's "two symmetric inputs, either one works" is
+    # trivially true because they are ONE net — which would also collapse the three-signal-pin
+    # count that the Digimatic argument leans on (review.md §10.3).
+    for a, b in ((2, 3), (1, 2), (1, 3)):
+        steps.append((f"pin{a}-pin{b}", f"pin {a}", f"pin {b}",
+                      f"are pins {a} and {b} separate nets? A short here would be a major finding"))
+        steps.append((f"pin{b}-pin{a}", f"pin {b}", f"pin {a}", "  (reverse direction)"))
+
+    # Signal pins against each ground reference, both directions.
+    for ref in refs:
+        for pin in (1, 2, 3):
+            note = "the mic's output" if pin == 1 else "input"
+            steps.append((f"gnd{ref}-pin{pin}", f"pin {ref} (GND)", f"pin {pin}",
+                          f"forward clamp, pin {pin} ({note})"
+                          + ("  <-- compare with pin 2" if pin == 3 else "")))
+        for pin in (1, 2, 3):
+            steps.append((f"pin{pin}-gnd{ref}", f"pin {pin}", f"pin {ref} (GND)",
+                          f"reverse, pin {pin} — expect high/OL"))
+    return steps
+
 
 _log_fh = None
 
@@ -103,7 +124,13 @@ def main():
                     help="diode: forward-drop test (default). resistance: measures into the MOhm "
                          "range, so it sees a partial/leaky path that reads OL in diode mode — "
                          "use this as the follow-up when diode mode comes back all-open.")
+    ap.add_argument("--refs", default="4,5",
+                    help="ground pins to reference against (default 4,5 — cross-checks the "
+                         "'pins 4 and 5 are the same node' assumption). Use '4' for a short run.")
     args = ap.parse_args()
+
+    refs = tuple(int(x) for x in args.refs.split(","))
+    steps = build_steps(refs)
 
     global OL_CUT, UNIT
     OL_CUT = 3.0 if args.mode == "diode" else 5e7   # 50 MOhm: above this the meter is open
@@ -133,8 +160,8 @@ def main():
         d.set_function(func)
         log(f"meter set to {func} mode (state: {d.state()})\n")
 
-        for key, red, black, why in STEPS:
-            log(f"--- {key} ---")
+        for key, red, black, why in steps:
+            log(f"--- [{steps.index((key, red, black, why)) + 1}/{len(steps)}] {key} ---")
             log(f"    RED   -> {red}")
             log(f"    BLACK -> {black}")
             log(f"    ({why})")
@@ -151,11 +178,9 @@ def main():
             log(f"    => {fmt(val)}   (raw {val!r} {unit})\n")
 
         log("\n==== RESULTS ====")
-        for key, _, _, _ in STEPS:
+        for key, _, _, _ in steps:
             log(f"  {key:12} {fmt(results.get(key, 'not run'))}")
 
-        p1 = results.get("GND->pin1")
-        p2, p3 = results.get("GND->pin2"), results.get("GND->pin3")
         log("\n==== VERDICT ====")
 
         # NB: an overload reads as a ~1e9 sentinel, NOT a voltage. Comparing two sentinels
@@ -166,55 +191,109 @@ def main():
         def is_num(v):
             return isinstance(v, float) and abs(v) <= OL_CUT
 
-        signal_reads = {k: v for k, v in results.items() if k != "pin4->pin5"}
-        measured = [v for v in signal_reads.values() if is_num(v)]
-
         short_cut = 0.05 if args.mode == "diode" else 1000.0   # <1k Ohm is a real leakage path
-        shorts = [k for k, v in signal_reads.items() if is_num(v) and abs(v) < short_cut]
-        if shorts:
-            log(f"  *** NEAR-SHORT on {shorts} -> blown clamp; real damage. ***")
-        else:
-            log("  No shorts and no low-resistance path from any signal pin to ground, in "
-                "either direction.")
-            log("  => rules out the COMMON over-voltage failure mode (a clamp fused short).")
+        conducts = lambda v: is_num(v) and abs(v) < short_cut
 
-        if not measured and all(is_ol(v) for v in signal_reads.values()):
-            log("\n  ALL signal-pin readings are OPEN (OL) in both directions.")
-            log("  *** The pin2-vs-pin3 symmetry comparison therefore DID NOT RUN. *** There is")
-            log("  no working-clamp baseline to compare against, so this test CANNOT distinguish")
-            log("  healthy protection structures from destroyed ones — only shorted ones (above).")
-            log("  Treat the damage question as PARTIALLY addressed, not settled.")
-            log("  Follow-up that would tighten it: re-run in RESISTANCE mode (--mode resistance),")
-            log("  which measures into the MOhm range instead of stopping at the diode-test")
-            log("  compliance voltage, and can see a partial/leaky path that reads OL here.")
-            log("\n  Note on pin 1: open in BOTH directions is exactly what an open-collector NPN")
-            log("  with a floating base does (battery out => base pulled nowhere). That is mildly")
-            log("  CONSISTENT with the inferred topology in review.md §5.1a, not against it.")
-        elif is_num(p2) and is_num(p3):
-            delta = abs(p2 - p3)
-            log(f"  pin2 vs pin3 forward drop: {p2:.4f} V vs {p3:.4f} V  "
-                f"(delta {delta * 1000:.1f} mV)")
-            if delta < 0.030:
-                log("  MATCHED -> no asymmetry between the symmetric inputs; no evidence of "
-                    "over-drive damage on pins 2/3.")
+        # --- 0. ground integrity ---------------------------------------------------------
+        g = results.get("pin4-pin5")
+        if conducts(g):
+            log(f"  [ground] pin4-pin5 = {fmt(g)} -> both ground pins contact the board. Good.")
+        elif g is not None and g != "not run":
+            log(f"  *** [ground] pin4-pin5 = {fmt(g)} — NOT the short §11.3 recorded! Either a")
+            log("      probe/breakout contact is bad or the ground bond has changed since the")
+            log("      teardown. EVERYTHING BELOW IS SUSPECT until this is resolved. ***")
+
+        # --- 1. are the signal pins separate nets? (never tested before) -------------------
+        log("")
+        pairs = [("pin2-pin3", "pin3-pin2", 2, 3), ("pin1-pin2", "pin2-pin1", 1, 2),
+                 ("pin1-pin3", "pin3-pin1", 1, 3)]
+        for fwd, rev, a, b in pairs:
+            vf, vr = results.get(fwd), results.get(rev)
+            vals = [v for v in (vf, vr) if isinstance(v, float)]
+            if not vals:
+                continue
+            if any(conducts(v) for v in vals):
+                log(f"  *** [nets] pin{a} and pin{b} CONDUCT ({fmt(vf)} / {fmt(vr)}) — they may be")
+                log(f"      THE SAME NET. ***")
+                if (a, b) == (2, 3):
+                    log("      This would be a MAJOR finding: §11.15's \"pins 2 and 3 are symmetric")
+                    log("      inputs, driving either works\" would be trivially true because there")
+                    log("      is only ONE input. It would also collapse the three-signal-pin count")
+                    log("      that the Digimatic argument leans on (review.md §10.3).")
             else:
-                log("  *** MISMATCHED (>30 mV) -> this is the damage signature. Re-seat the "
-                    "probes and repeat before believing it; if it holds, revisit review.md §4. ***")
-            if is_num(p1):
-                log(f"  pin1 forward drop: {p1:.4f} V (expected to DIFFER from the inputs — it "
-                    f"should land on a transistor collector, not an MCU pin)")
-                if abs(p1 - p2) < 0.030:
-                    log("  NOTE: pin 1 reads like the inputs — that would undercut the inferred "
-                        "topology in review.md §5.1a. Worth recording either way.")
-            elif is_ol(p1):
-                log("  pin1: open, while the inputs conduct -> consistent with pin 1 being a "
-                    "transistor collector rather than an MCU pin (review.md §5.1a).")
-        elif is_ol(p2) != is_ol(p3):
-            log(f"  *** ASYMMETRY: pin2 {fmt(p2)} vs pin3 {fmt(p3)} — one conducts and the other")
-            log("  does not, on pins that are supposed to be symmetric inputs. Re-seat the probes")
-            log("  and repeat; if it holds, this is the damage signature (review.md §4). ***")
+                log(f"  [nets] pin{a} / pin{b}: {fmt(vf)} / {fmt(vr)} -> separate nets, not shorted.")
+
+        # --- 2. cross-check the two ground references -------------------------------------
+        log("")
+        disagreements = []
+        for pin in (1, 2, 3):
+            for tmpl in (f"gnd{{}}-pin{pin}", f"pin{pin}-gnd{{}}"):
+                v4, v5 = results.get(tmpl.format(4)), results.get(tmpl.format(5))
+                if isinstance(v4, float) and isinstance(v5, float) and is_ol(v4) != is_ol(v5):
+                    disagreements.append((tmpl.format("4/5"), v4, v5))
+        if disagreements:
+            log("  *** [refs] pin-4- and pin-5-referenced readings DISAGREE: ***")
+            for k, v4, v5 in disagreements:
+                log(f"      {k}: via pin4 {fmt(v4)} vs via pin5 {fmt(v5)}")
+            log("      Pins 4 and 5 are NOT interchangeable as assumed. Re-seat and repeat.")
         else:
-            log("  pins 2/3 not both measured — inconclusive.")
+            _ref_reads = [v for k, v in results.items() if "gnd" in k and isinstance(v, float)]
+            if _ref_reads and any(is_num(v) for v in _ref_reads):
+                log("  [refs] pin-4- and pin-5-referenced readings agree -> the two ground pins")
+                log("         are interchangeable, as §11.3 assumed. Verified, not taken on faith.")
+            else:
+                log("  [refs] every ground-referenced reading is OPEN, so pin-4 vs pin-5 agreement")
+                log("         is VACUOUS (open == open proves nothing). The interchangeability")
+                log("         assumption is NOT verified by this run — only the pin4-pin5 short is.")
+
+        # --- 3. shorts to ground / damage --------------------------------------------------
+        log("")
+        gnd_reads = {k: v for k, v in results.items()
+                     if ("gnd" in k) and isinstance(v, float)}
+        gshorts = [k for k, v in gnd_reads.items() if conducts(v)]
+        if gshorts:
+            log(f"  *** [damage] NEAR-SHORT to ground on {gshorts} -> blown clamp; real damage. ***")
+        else:
+            log("  [damage] No short and no low-resistance path from any signal pin to ground, in")
+            log("           either direction, against either ground pin.")
+            log("           => rules out the COMMON over-voltage failure mode (a clamp fused short).")
+
+        fwd = {p: results.get(f"gnd4-pin{p}") for p in (1, 2, 3)}
+        if gnd_reads and all(is_ol(v) for v in gnd_reads.values()):
+            log("\n  [damage] ALL signal-to-ground readings are OPEN in both directions.")
+            log("  *** The pin2-vs-pin3 symmetry comparison therefore DID NOT RUN. *** With no")
+            log("  working-clamp baseline there is nothing to compare against, so this CANNOT")
+            log("  distinguish healthy protection structures from destroyed ones — only shorted")
+            log("  ones (above). Damage is PARTIALLY addressed, not settled.")
+            if args.mode == "diode":
+                log("  Follow-up: re-run with --mode resistance, which measures into the MOhm range")
+                log("  instead of stopping at the diode-test compliance voltage.")
+            log("\n  Note on pin 1: open in BOTH directions is exactly what an open-collector NPN")
+            log("  with a floating base does (battery out => base pulled nowhere). Mildly")
+            log("  CONSISTENT with the inferred topology in review.md §5.1a, not against it.")
+        elif is_num(fwd[2]) and is_num(fwd[3]):
+            delta = abs(fwd[2] - fwd[3])
+            log(f"\n  [damage] pin2 vs pin3 forward: {fwd[2]:.4f} vs {fwd[3]:.4f} {UNIT} "
+                f"(delta {delta:.4f})")
+            tol = 0.030 if args.mode == "diode" else max(fwd[2], fwd[3]) * 0.20
+            if delta < tol:
+                log("  MATCHED -> no asymmetry between the symmetric inputs; no evidence of")
+                log("  over-drive damage on pins 2/3.")
+            else:
+                log("  *** MISMATCHED -> this is the damage signature. Re-seat the probes and")
+                log("  repeat; if it holds, revisit review.md §4. ***")
+            if is_ol(fwd[1]):
+                log("  pin1 open while the inputs conduct -> consistent with pin 1 being a")
+                log("  transistor collector rather than an MCU pin (review.md §5.1a).")
+            elif is_num(fwd[1]):
+                log(f"  pin1 forward: {fwd[1]:.4f} {UNIT} — expected to DIFFER from the inputs.")
+                if abs(fwd[1] - fwd[2]) < tol:
+                    log("  NOTE: pin 1 reads like the inputs — that would undercut the inferred")
+                    log("  topology in review.md §5.1a. Worth recording either way.")
+        elif isinstance(fwd[2], float) and isinstance(fwd[3], float) and is_ol(fwd[2]) != is_ol(fwd[3]):
+            log(f"\n  *** [damage] ASYMMETRY: pin2 {fmt(fwd[2])} vs pin3 {fmt(fwd[3])} — one")
+            log("  conducts and the other does not, on pins that should be symmetric inputs.")
+            log("  Re-seat and repeat; if it holds, this is the damage signature (review.md §4). ***")
 
     except KeyboardInterrupt:
         log("\n[interrupted by user — partial results above]")
