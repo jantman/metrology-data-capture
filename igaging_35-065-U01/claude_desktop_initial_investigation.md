@@ -642,6 +642,47 @@ If pull-ups finally reveal a driven line → Phase B (framing/bit-order/sign) vi
 `analyze_capture.py`. If even pull-ups are silent, the remaining option is sniffing the genuine
 `100-700-USB-MC` host cable (§11.10 #3).
 
+### 11.14 BREAKTHROUGH — the DATA button triggers a device response (2026-07-26)
+
+**After two-plus sessions of total silence, the mic finally drives a connector pin.** The
+trigger was the on-body **DATA button** — the one interaction we'd never combined with the
+pull-up rig.
+
+**Setup:** all three signal pins pulled UP to +3 V (bench PSU); AWG pulsing pin 3 at ~10–20 Hz
+active-low ("REQ", via 1 kΩ); scope watching pins 1 & 2; mic awake, reading. Then **press the
+DATA button.**
+
+**Result:** **pin 1 is actively driven LOW — hard, to ~−0.7 V (open-collector)** — in bursts that
+track each button press (`findings/2026-07-26_databutton_*.png`). This is the FIRST active drive
+we've ever seen. Neither passive-pull-ups-with-button (§11.12 Test 1) nor REQ-without-button
+produced it; it needs **the button** (with pin 3 being driven — whether pin 3's pulsing is
+*required* or incidental is not yet nailed down).
+
+**Partial characterization (decode NOT yet complete):**
+- **pin 1 = the hard-driven line** (open-collector to −0.7 V). pin 2 / pin 3 show only weak
+  signal / noise, not hard-driven.
+- High-res RAW (3.2 ns/pt): pin 1 makes **one clean high→low edge and stays low ≥1.6 ms** — no
+  fast bit-toggling in that capture. The earlier wide (20 ms) screenshot showed **dense burst
+  activity spanning ~10 ms**. So the full event is long and may have structure our captures
+  haven't cleanly resolved — pin 1 is either DATA or a driven strobe; **framing/bit-rate/CLK
+  location still unknown.**
+
+**Instrument gotchas (decode blockers to fix next):**
+- **DHO814 RAW multi-channel readback is INCONSISTENT** — the same frozen capture read back as
+  10 k / 250 k / 1 M points on different calls, and a 2nd channel read sometimes returns short.
+  **NORMal (on-screen, ~1000-pt) read is reliable** but low-res. `req_capture --capture` also
+  read the memory **too soon after the trigger** (needs a settle delay). Use NORMal or add
+  settle + verify point count.
+- The bits (if any) are **faster than the 1000-pt screen read resolves** at a 2 ms window — a
+  decode capture needs a window/depth matched to the (still-unknown) bit rate with a reliable
+  readout.
+
+**NEXT — clean decode campaign:** (1) determine the **minimal trigger** (button alone vs button +
+pin-3 drive); (2) capture the **whole ~10 ms event** at high resolution with a *reliable* readout
+(NORMal-mode tiling, or fixed RAW read + settle); (3) identify **CLK vs DATA** and decode framing
+→ Phase B. Tooling: `req_capture.py` (`--capture`, `--cap-tb-us`, byte-range debug);
+`findings/` holds the milestone screenshots.
+
 **Photo index** (`board_teardown/`): `PICT0001` exterior (TwinForCe/USB Mic); `PICT0011` full
 battery-side board; `PICT0022/0023/0028/0037` connector + jumper matrix + Q1/Q2 close-ups.
 

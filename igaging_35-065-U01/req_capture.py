@@ -41,6 +41,8 @@ def main():
     ap.add_argument("--capture", action="store_true",
                     help="arm a falling-edge trigger on --trig-pin to grab the device frame")
     ap.add_argument("--trig-pin", type=int, default=0, choices=(0, 1, 2, 3))
+    ap.add_argument("--cap-tb-us", type=float, default=2000.0,
+                    help="capture timebase in us/div (zoom); 2000=20ms window, 200=2ms window")
     ap.add_argument("--max-volts", type=float, default=3.0)
     args = ap.parse_args()
     if args.amp > args.max_volts:
@@ -68,7 +70,7 @@ def main():
             print(f"\n>>> Armed: trigger on pin {args.trig_pin} falling through {args.thresh} V "
                   f"(device CK/DATA). Waiting up to {args.secs:.0f}s... <<<")
             scope.arm_single(trig_ch=tch, level=args.thresh, slope="NEGative",
-                             mdepth=1_000_000, tb_scale=0.002, sweep="NORMal")
+                             mdepth=1_000_000, tb_scale=args.cap_tb_us / 1e6, sweep="NORMal")
             status = scope.wait_stop(timeout=args.secs)
             if status == "STOP":
                 tag = f"req_p{args.req_pin}_frame"
@@ -77,7 +79,8 @@ def main():
                     with open(f"{OUTDIR}/{tag}_ch{c}.bin", "wb") as f: f.write(raw)
                     with open(f"{OUTDIR}/{tag}_ch{c}.pre", "w") as f: f.write(pre)
                     t, v = digitize_transitions(pre, raw)
-                    print(f"  ch{c}: {t} transitions, vpp={v:.2f}")
+                    rng = f"bytes {min(raw)}..{max(raw)}" if raw else "empty"
+                    print(f"  ch{c}: {t} transitions, vpp={v:.2f}, {len(raw)} pts, {rng}")
                 scope.screenshot(f"{OUTDIR}/{tag}_scope.png")
                 print(f"\n*** CAPTURED a device-driven frame after REQ on pin {args.req_pin}! "
                       f"Digimatic-style SPC confirmed. Analyze: python analyze_capture.py "
