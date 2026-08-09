@@ -1,6 +1,6 @@
 # STATUS — iGaging 35-065-U01 data port
 
-**Last updated:** 2026-07-26. Start here; everything else is detail.
+**Last updated:** 2026-08-09. Start here; everything else is detail.
 
 ## Where this stands
 
@@ -54,6 +54,9 @@ evidence is empirical.
 ## Ruled out
 
 - Free-running / self-clocked output (passive listening, with and without pull-ups).
+- **Clocking pin 2 while watching pin 3** — 32 combinations of button state × rate × duty ×
+  continuous/burst, armed trigger, clock verified each time: pin 3 never driven (§11.20). The
+  first *trustworthy* negative here; the role swap is still untested.
 - Any transmission on pins 2/3 during a button press: with **no clock at all**, both inputs
   unmasked simultaneously for the first time, neither is ever pulled low (§11.18).
 - Pin 1 as a VDD input that powers the interface.
@@ -75,21 +78,20 @@ count that §11.19 has now spent.)
 on a generic pin mapping already known to be wrong for this unit. Retracted; see `review.md`
 §10.3.)*
 
-**For it:**
-- **The pin count fits exactly.** Digimatic minimally needs REQ + CLK + DATA + GND. This unit has
-  **three signal pins and two grounds**, and needs no VDD pin because it is self-powered (pin 1
-  drew 0.0 mA). Three signals is precisely the requirement.
-- **It resolves the two-drivers contradiction.** Q1/Q2 are two open-collector drivers but only one
-  output pin has been identified. Digimatic predicts exactly two device outputs: CK and DATA.
-- Desk research (`igaging_dataconnect_hardware_findings.md`) argues the same from the accessory
-  hardware — **but that is unmeasured third-party inference, not evidence.** See `review.md` §11.
+**Both arguments that favoured it have since been spent** (§11.19):
 
-**Against it:**
-- §11.15 measured **one output (pin 1) and two inputs (pins 2/3)**; Digimatic wants two outputs and
-  one input. This is the strongest counter-evidence — but it is softer than it reads: driving a pin
-  masks any device drive on it (only 2 of 4 unmasked cells were captured), and the 10 kΩ pull-ups
-  used are within ~2× of what these weak drivers can sink, so a driven-but-weak pin could read as
-  "held at the rail." See `review.md` §3.4 and §5.7a.
+- ~~"The pin count fits exactly — three signal pins for REQ + CLK + DATA."~~ **Pin 1 is the
+  button**, so only **two** signal pins remain. Digimatic needs three. This is now the decisive
+  argument *against*.
+- ~~"It resolves the two-drivers contradiction: Q1/Q2 = CK + DATA."~~ That contradiction is
+  resolved differently and more simply — pin 1 is not driven by either transistor, so Q1/Q2 map
+  onto pins 2 and 3 with no Digimatic required.
+- The desk research in `igaging_dataconnect_hardware_findings.md` still argues for Digimatic from
+  the accessory hardware, but that is unmeasured third-party inference written without knowledge
+  of this unit (`review.md` §11).
+
+Not formally impossible — one of the two remaining pins would have to be bidirectional — but it is
+no longer the leading reading.
 
 ## Inference worth testing: Q1 and Q2 most likely drive pins 2 and 3
 
@@ -106,12 +108,14 @@ reason to open the case (step 7).
 
 ## Not yet known
 
-- What carries the measurement data. No connector pin has shown it under any stimulus tried.
-- Whether pin 1's assertion is a protocol signal or a "data ready" / button line.
-- The true duration and internal structure of the pin-1 event — **every capture of it ends while
-  it is still low.**
-- The internal logic-rail voltage (still unmeasured; measure across C4/C5).
-- Where Q2 goes. There are two open-collector drivers but only one identified output pin.
+- **What carries the measurement data.** No connector pin has shown it under any stimulus tried.
+- **Whether pin 2 can be driven by the mic** — never watched while pin 3 was clocked. Next step.
+- **Whether the mic senses the button at all.** Pin 1 is a switch to ground; if it goes nowhere
+  else, the MCU may be unaware of it and the button is purely a host-side signal. §11.20 saw no
+  difference between button held and released, which is weak evidence for "unaware".
+- **The internal logic-rail voltage.** Still unmeasured; the threshold-sweep method turned out
+  invalid (§11.18) and no closed-case alternative exists. Needs C4/C5, i.e. board access.
+- **Where Q1 and Q2 actually go** — inferred to be pins 2 and 3, never rung out.
 
 ## Next experiments (ranked)
 
