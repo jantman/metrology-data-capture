@@ -1,0 +1,45 @@
+AWG  : RIGOL TECHNOLOGIES,DG902 Pro,DG9P285M00010,00.02.01.00.02
+SCOPE: RIGOL TECHNOLOGIES,DHO814,DHO8A260300728,00.01.04
+
+[control] pulsing pin 1 LOW via CH1; an armed trigger on pin 1 must fire.
+[control] trigger FIRED — detection path good
+
+Sweeping 16 combinations, 8s each (~3 min). Watching pin 2 for a falling edge through 1.2 V.
+
+button    mode           freq  duty   clkVPP  result
+--------------------------------------------------------------
+held      continuous     9000    50     2.32  -
+held      continuous     9000    20     2.50  -
+held      continuous     2000    50     2.27  -
+held      continuous     2000    20     2.38  -
+held      continuous      500    50     2.27  -
+held      continuous      500    20     2.32  -
+held      continuous      100    50     2.46  -
+held      continuous      100    20     2.42  -
+    (burst 2.33 ms + 7 ms gap = 9.33 ms period)
+held      burst          9000    50     2.37  -
+    (burst 2.33 ms + 7 ms gap = 9.33 ms period)
+held      burst          9000    20     2.35  -
+    (burst 10.50 ms + 7 ms gap = 17.50 ms period)
+held      burst          2000    50     2.36  -
+    (burst 10.50 ms + 7 ms gap = 17.50 ms period)
+held      burst          2000    20     2.40  -
+    (burst 42.00 ms + 7 ms gap = 49.00 ms period)
+held      burst           500    50     2.41  -
+    (burst 42.00 ms + 7 ms gap = 49.00 ms period)
+held      burst           500    20     2.39  -
+    (burst 210.00 ms + 7 ms gap = 217.00 ms period)
+held      burst           100    50     2.32  -
+    (burst 210.00 ms + 7 ms gap = 217.00 ms period)
+held      burst           100    20     2.41  -
+
+AWG + PSU OFF.
+
+==== RESULT ====
+  pin 2 was never pulled low, across all 16 combinations,
+  with a continuously-armed trigger (not the polling loop that produced the earlier
+  false negatives). This is the first trustworthy negative for the data interface.
+
+  Next: swap the roles — move AWG CH2 to pin 2 and re-run with
+  --clk-pin 2 --data-pin 3. If that is also negative,
+  the mic does not respond to an open-loop clock and the cable sniff is the way.

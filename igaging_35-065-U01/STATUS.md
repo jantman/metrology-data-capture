@@ -54,10 +54,11 @@ evidence is empirical.
 ## Ruled out
 
 - Free-running / self-clocked output (passive listening, with and without pull-ups).
-- **Open-loop clocking, BOTH directions** — clock pin 2/watch pin 3 (§11.20) and clock pin 3/watch
-  pin 2 (§11.21). 64 combinations of button state × rate × duty × continuous/burst, armed trigger
-  on the watched pin, clock verified on the driven one. **The mic does not respond to an open-loop
-  clock on either wire.** Subject to two untested variables — 10 kΩ pull-ups and 3 V amplitude.
+- **Open-loop clocking, BOTH directions, THREE rail voltages** — clock pin 2/watch pin 3 (§11.20),
+  clock pin 3/watch pin 2 (§11.21), and the latter again at 1.8 V and 2.4 V rail+amplitude
+  (§11.22). **96 combinations**, armed trigger on the watched pin, clock verified on the driven
+  one, positive control every run. **The mic does not respond to an open-loop clock.** One
+  variable still outstanding: the 10 kΩ pull-ups.
 - **The button changing anything** — held vs released made no difference in any of the 64
   combinations, consistent with the mic's MCU not sensing it at all.
 - Any transmission on pins 2/3 during a button press: with **no clock at all**, both inputs
@@ -140,12 +141,14 @@ reason to open the case (step 7).
    ~~**`interface_sweep.py`**, both role assignments~~ **DONE 2026-08-09 — BOTH NEGATIVE**
    (§11.20, §11.21). 64 combinations, positive control fired, clock verified every time: neither
    pin 2 nor pin 3 is ever pulled low. **Open-loop clocking is exhausted** — properly this time.
-   **→ NEXT: swap the pull-ups to 100 kΩ and re-run.** This is the strongest remaining explanation
-   for a false negative: Q1/Q2's 330 kΩ base resistors cap their sink at ≈0.7 mA against the
-   0.3 mA a 10 kΩ pull-up demands — ~2× margin where the references say 100 kΩ (`review.md`
-   §5.7a). A weak driver could be held near the rail. It is a resistor swap.
-   **Then: lower drive amplitudes** (2 V, 1.5 V). Always 3 V so far, and if the internal rail is
-   1.8 V that has been clamping the inputs.
+   ~~**Then: lower drive amplitudes.**~~ **DONE 2026-08-09 — negative at 1.8 V and 2.4 V**
+   rail+amplitude (§11.22), which also removed the 3 V pull-up rail that had been forward-biasing
+   the mic's input clamps in every test since §11.12.
+   **→ NEXT, and now the only variable left: swap the pull-ups to 100 kΩ.** Q1/Q2's 330 kΩ base
+   resistors cap their sink at ≈0.7 mA at a 3 V internal rail — but at 1.8 V that falls to
+   ≈0.33 mA against the 0.3 mA a 10 kΩ pull-up demands, i.e. **right at the edge**. A weak driver
+   would be masked *precisely* in the low-voltage runs just completed, so this is not an
+   alternative to them — it is what makes them conclusive (`review.md` §5.7a).
 3. **Redo the decisive tests at 100 kΩ** rather than 10 kΩ pull-ups (`review.md` §5.7a). Q1/Q2's
    330 kΩ base resistors cap the sink at ~0.7 mA against the 0.3 mA a 10 kΩ pull-up demands — only
    ~2× margin, so a weakly-driven pin could read as "held at the rail". Cheap insurance if step 2

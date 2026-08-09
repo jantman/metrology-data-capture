@@ -1135,6 +1135,42 @@ minutes and each sweep is ~7 min, so a run that starts awake finishes awake; but
 nor §11.21 confirmed the starting state. **Future runs should note the LCD state before and
 after.** This is a systematic gap in the method, not a specific doubt about these results.
 
+### 11.22 Low-voltage sweeps (1.8 V and 2.4 V) — also negative (2026-08-09)
+
+Free follow-up to §11.21, pure software: no rewiring, no resistor changes. Mic confirmed awake
+(LCD on, thimble moved immediately beforehand).
+
+**Why lower the rail, not just the amplitude.** Every test since §11.12 has held a **3 V pull-up
+rail on the mic's input pins**. If its internal rail is 1.8 V, that forward-biases the inputs'
+upper clamps *continuously* — roughly 50 µA per pin through 10 kΩ, with no clock running at all.
+Lowering `--rail` removes that condition. It also gives clean logic: with `amp == rail` the
+1 k/10 k divider yields `pin_high = rail` exactly and `pin_low = rail/11`.
+
+| rail / amp | trigger thresh | combinations | result |
+|---|---|---|---|
+| 1.8 V | 0.9 V | 16 | **negative** |
+| 2.4 V | 1.2 V | 16 | **negative** |
+
+Pre-flight re-verified at 1.8 V first: pins idled at 1.766 / 1.786 / 1.795 V, CH2 driving pin 3
+only, divider measured 1.78 / 0.14 V against a predicted 1.80 / 0.16. Positive control fired in
+both sweeps; clock verified on every combination; no spurious triggers.
+
+The button axis was dropped to `held` alone — §11.20/§11.21 showed no held-vs-released difference
+across 64 combinations — halving each run to 16.
+
+**Running total: 96 combinations, all negative**, spanning both role assignments at 3 V and three
+rail voltages on the clock-pin-3 / watch-pin-2 assignment.
+
+**Untested cell:** low voltage on the *other* role direction (clock pin 2 / watch pin 3). It needs
+CH2 moved back, and given three negatives on the reverse it is low-value — but it is a gap.
+
+**Still the strongest remaining explanation for a false negative: the 10 kΩ pull-ups.** Note the
+coupling that makes this more likely at low rail voltages, not less: the base drive for Q1/Q2 comes
+from the mic's own rail, so at 3 V `Ib ≈ 7 µA` and `Ic(max) ≈ 0.7 mA` against a 10 kΩ pull-up's
+0.3 mA demand — comfortable — but at a 1.8 V rail `Ib ≈ 3.3 µA` and `Ic(max) ≈ 0.33 mA`, right at
+the edge. **A weak driver would be masked precisely in the low-voltage runs above.** The 100 kΩ
+swap is therefore not an alternative to these tests; it is the test that makes them conclusive.
+
 ---
 
 ## Remaining phases (carried over from the retired `BRINGUP_PLAN.md`)
