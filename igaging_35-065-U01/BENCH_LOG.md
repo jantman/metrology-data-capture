@@ -1226,7 +1226,19 @@ plausible-but-wrong 2.68/2.48 on a pin whose VPP was 3.20, so it now falls back 
 
 Per-sample noise is 0.8–0.9 mV, so every delta is an order of magnitude below the noise floor.
 Idle level is set purely by our pull-up/probe divider and is **completely independent of the mic's
-power state**. The §11.21 gap stands: only the LCD can confirm awake. (Also established: **off and
+power state**. The §11.21 gap stands electrically: only the LCD can confirm awake.
+
+**But it is resolvable procedurally, and that is now the method.** Auto-off is ~27 min; a sweep is
+~7 min. Wake the mic, start within ~2 min, and the run is covered with a ~20 min margin — and the
+margin is large enough that even a badly wrong auto-off estimate would not threaten it. This run
+was audited exactly that way after the fact, since the LCD could not be checked at the time:
+
+    mic woken     17:41:26      sweep started 17:43:16  (+1m50s)
+    sweep ended   17:48:40      auto-off due  18:08:26  (margin 19m46s)
+
+Even if auto-off were as short as 8 min, a run finishing at +7m14s would be covered. For this to
+work the log must record both ends of the window, so `interface_sweep.py` now stamps the finish
+time as well as the start. (Also established: **off and
 asleep are the same state** on this mic, and **auto-off is ~27 min** — sharper than §11.7's "tens
 of minutes".)
 

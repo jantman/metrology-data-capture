@@ -227,7 +227,10 @@ def main():
         except Exception:
             pass
         psu.off(); awg.close(); scope.close()
-        log("\nAWG + PSU OFF.")
+        # Stamp the END as well as the start. There is no rig-side awake detector (§11.23), so a
+        # run's precondition can only be audited afterwards from its time window against the ~27
+        # min auto-off — which needs both ends recorded, not just the start.
+        log(f"\nAWG + PSU OFF.  finished {datetime.datetime.now():%Y-%m-%d %H:%M:%S}")
 
     log("\n==== RESULT ====")
     if hits:
