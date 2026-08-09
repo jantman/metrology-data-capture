@@ -47,6 +47,11 @@ LOG_PATH = os.path.join(FINDINGS, "button_switch_latest.txt")
 CLOSED_MAX = 100.0        # ohms; a closed contact reads well under this
 OPEN_MIN = 1e5            # ohms; above this the path is open for our purposes
 
+
+def is_num(v):
+    """A real reading rather than the meter's ~1e9 overload sentinel."""
+    return isinstance(v, float) and abs(v) < OPEN_MIN
+
 _log_fh = None
 
 
@@ -96,8 +101,9 @@ def show(tag, s):
         log(f"    {tag}: no readings")
         return
     med = "OL/open" if abs(s["median"]) > OPEN_MIN else f"{s['median']:,.1f} Ω"
-    log(f"    {tag}: median {med}   closed-samples {s['frac_closed']*100:.0f}% "
-        f"({s['longest_closed']} consecutive)   [min {s['min']:,.1f} — ignore, transient-prone]")
+    log(f"    {tag}: median {med}  <-- the verdict rests on this and the consecutive run")
+    log(f"        closed-samples {s['frac_closed']*100:.0f}% ({s['longest_closed']} consecutive)"
+        f"   [%-of-window is reaction time, not physics; min {s['min']:,.1f} is transient-prone]")
 
 
 def main():
@@ -154,8 +160,18 @@ def main():
         if not rel or not hel:
             log("  Missing readings — re-run.")
             return
-        held_closed = hel["frac_closed"] >= 0.7 and hel["longest_closed"] >= 5
-        rel_closed = rel["frac_closed"] >= 0.7
+        # Decide on the MEDIAN plus a sustained run — never on frac_closed alone.
+        # frac_closed measures how much of the sampling window the button happened to be down
+        # for, which is human reaction time, not physics. A 2026-07-26 run read median 0.8 Ohm
+        # while held (identical to the jumpered control) with 23 consecutive closed samples, and
+        # a >=0.7 fraction gate rejected it at 55% and printed "NOT a switch" — the exact
+        # opposite of the truth. The median and the longest run are the physical signals.
+        def closed(st):
+            return (is_num(st["median"]) and abs(st["median"]) < CLOSED_MAX
+                    and st["longest_closed"] >= 5)
+
+        held_closed = closed(hel)
+        rel_closed = closed(rel)
         if held_closed and not rel_closed:
             log(f"  *** MECHANICAL SWITCH CONTACT. *** pin {args.pin} conducts to ground while")
             log("  the button is held, with NO POWER APPLIED. A transistor cannot do that.")

@@ -947,6 +947,27 @@ the host to clock it. Every clocking attempt in this project has driven a free-r
 pin 4. Press the DATA button. **The continuity buzzer sounds for exactly as long as the button is
 held** — verified over a 16-second hold.
 
+**Independently confirmed with numbers** (`findings/button_switch_2026-07-26_172315.txt`, a
+`button_switch_test.py` run recovered during a 2026-08-09 audit — see the note below):
+
+| condition, battery OUT | median | sustained |
+|---|---|---|
+| **control**: pin 1 jumpered to pin 4 | **0.8 Ω** | 100 %, 41 consecutive |
+| button **released** | **OL (open)** | 0 % |
+| button **held** | **0.8 Ω** | 55 %, 23 consecutive |
+
+Held reads *identically to a deliberate short*, against a validated positive control, with the
+mic unpowered. This is much stronger than the buzzer alone.
+
+> **⚠ That run printed the OPPOSITE verdict, and it was nearly recorded as fact.** The script
+> gated on `frac_closed >= 0.7`; the held reading was 55 %, so it declared **"NOT a switch — pin 1
+> IS an MCU-driven output"**. The 55 % is nothing but reaction time — about 3.5 s of an 8 s window
+> elapsed before the button went down — whereas the median and the 23-sample consecutive run are
+> the physical signals, and both say *closed*. The log was never read at the time; the correct
+> conclusion survived only because the buzzer was reported instead of the script output. Gate
+> fixed (median + sustained run; the fraction is now printed but explicitly labelled as reaction
+> time, not evidence).
+
 **A mechanical switch conducts unpowered. A transistor cannot.** Pin 1 is therefore the DATA
 button's contact, wired straight to the connector for the host cable to sense. It is not an
 output, and it never was.

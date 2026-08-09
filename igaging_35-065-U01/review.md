@@ -862,6 +862,36 @@ For balance, these conclusions are well-evidenced and should be treated as solid
 
 ---
 
+## 9a. Self-audit: two truncation misses of my own (2026-08-09)
+
+Prompted by "could `tail` have missed anything?" — it could, and it did. Recording both, since
+this review exists to hold the project's evidence to a standard and that has to include my own.
+
+1. **`tail -25` on a sweep run** hid two of sixteen result rows and the positive-control line, and
+   I asserted "positive control fired in both sweeps, clock verified on every combination" without
+   having seen it. Checked afterwards against the full log: the claims were true. Correct
+   conclusion, unjustified at the time it was written.
+2. **Far worse — an entire run log never read.**
+   `findings/button_switch_2026-07-26_172315.txt` contained the quantitative version of the §11.19
+   switch test: control jumper 0.8 Ω, released OL, **held 0.8 Ω with 23 consecutive closed
+   samples**. Decisive, and it strengthens §11.19 considerably. **But the script printed "NOT a
+   switch — pin 1 IS an MCU-driven output"**, because I had gated the verdict on
+   `frac_closed >= 0.7` and the held fraction was 55 % — which measures how much of the sampling
+   window the button happened to be down for, i.e. human reaction time, not physics. Had that
+   output been reported instead of the continuity buzzer, §11.19 would have been recorded
+   inverted and everything after it built on the wrong pin model.
+
+**The pattern in both, and in the `sample_min` bug before them:** I keep writing verdict functions
+whose decision rests on a statistic that noise or timing can dominate — `min` in the first switch
+test, `frac_closed` in the second, `VMIN` in the tooling I criticised others for (§1.3). Fixed
+each time, but the recurrence is the finding. Verdict logic deserves the same adversarial reading
+this review applies to conclusions, and **every run log should be read in full, not sampled** —
+the scripts already write complete logs precisely so that is cheap.
+
+An empty `button_switch_latest.txt` from an aborted 18:24 run also sits alongside, meaning the
+"latest" pointer names the useless file while the good data is in the timestamped one. Worth
+remembering when reaching for `*_latest.txt`.
+
 ## 10. Review of `igaging_protcol_research.md` (added 2026-07-26)
 
 **Overall: this is the strongest document in the directory.** It is better sourced, better
