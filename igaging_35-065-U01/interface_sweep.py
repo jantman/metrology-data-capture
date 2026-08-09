@@ -107,6 +107,17 @@ def main():
     psu = PSU()
     awg = Awg(); log(f"AWG  : {awg.query('*IDN?')}")
     scope = Scope(); log(f"SCOPE: {scope.query('*IDN?')}")
+
+    # Record the run parameters IN THE LOG. Without this the archived file cannot be told apart
+    # from any other run — the §11.22 logs differ only by rail voltage, which was recoverable
+    # solely by inference from the clkVPP column. Note psu_lib prints its bring-up line to stdout
+    # only, so the rail has to be logged here explicitly.
+    log(f"\nRUN {stamp}")
+    log(f"  clk pin {args.clk_pin} | data pin {args.data_pin} (watched) | button pin {args.btn_pin}")
+    log(f"  rail {args.rail:g} V | amp {args.amp:g} V | trigger {args.thresh:g} V falling")
+    log(f"  freqs {args.freqs} Hz | duties {args.duties} % | modes {args.modes} | "
+        f"buttons {args.buttons}")
+    log(f"  burst {args.ncycles} cycles + {args.gap_ms:g} ms gap | dwell {args.dwell:g} s")
     for ch in (1, 2, 3, 4):
         scope.setup_channel(ch, scale=0.8, offset=-2.0, coupling="DC")
 
