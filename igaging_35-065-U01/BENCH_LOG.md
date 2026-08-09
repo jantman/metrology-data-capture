@@ -1084,6 +1084,57 @@ interface.
 - **Amplitudes below 3 V**, and coordinated two-input drive (which needs a third source, since
   CH1 is now the button).
 
+### 11.21 Role swap — clock pin 3 / watch pin 2 — also negative; open-loop clocking is now properly exhausted (2026-08-09)
+
+Completes the matrix §11.20 left open. AWG CH2 moved to pin 3; pre-flight re-verified the rig
+(rail 3.010 V, all three pull-ups present, CH1 driving only pin 1, CH2 only pin 3, divider as
+predicted). Same 32 combinations, trigger armed on **pin 2** this time.
+
+**Result: pin 2 was never pulled low.** No VOIDs — the §11.20 burst-period fix held, so every
+combination had a verified clock. Positive control fired. Not one spurious trigger.
+
+#### Both directions are now negative, with sound instrumentation
+
+| clocked | watched | result |
+|---|---|---|
+| pin 2 | pin 3 | negative, 32 combinations (§11.20) |
+| pin 3 | pin 2 | negative, 32 combinations (this section) |
+
+64 combinations total across button held/released × 9 k/2 k/500/100 Hz × 50 %/20 % duty ×
+continuous/burst, every one with an armed trigger on the watched pin and a verified clock on the
+driven one. **The mic does not respond to an open-loop clock on either wire.** That hypothesis —
+the original §3 "feed it a clock and it shifts out 21 bits" — is now properly dead for this unit
+under these conditions, and this time the negative is not an artefact of the measurement.
+
+#### The button makes no difference at all
+
+Across all 64 combinations, held vs released changed nothing. Combined with §11.19 (pin 1 is a
+switch to ground), the simplest reading is that **the mic's MCU does not sense the button** — it is
+purely a host-side signal for the cable to act on. Not proven, but the button axis can probably be
+dropped from future sweeps, halving them.
+
+#### What could still make this a false negative — two specific variables
+
+1. **Pull-up strength — the strongest candidate.** Everything here used **10 kΩ**. Q1/Q2's 330 kΩ
+   base resistors cap their sink at ≈0.7 mA, against the 0.3 mA a 10 kΩ pull-up demands: only ~2×
+   margin, where the references recommend **100 kΩ** (`review.md` §5.7a). A genuinely weak driver
+   could be held near the rail and read as "never driven". **A resistor swap, and the next thing
+   to try.**
+2. **Drive amplitude.** Always 3 V. The internal rail is still unmeasured (§11.18's method was
+   invalid), and if it is 1.8 V then 3 V into its inputs is clamping and back-feeding. Lower
+   amplitudes are untested.
+
+Beyond those, coordinated two-input drive (both wires with a phase relationship) needs a third
+source — freeing CH1 by using a pin1→pin4 jumper for the button would allow it.
+
+#### Caveat on both sweeps: mic-awake state was never verified
+
+Nothing in the rig can tell whether the mic was awake — the pins sit at the pull-up rail either
+way — and §11.7 records an earlier burst run invalidated by exactly that. Auto-off is tens of
+minutes and each sweep is ~7 min, so a run that starts awake finishes awake; but neither §11.20
+nor §11.21 confirmed the starting state. **Future runs should note the LCD state before and
+after.** This is a systematic gap in the method, not a specific doubt about these results.
+
 ---
 
 ## Remaining phases (carried over from the retired `BRINGUP_PLAN.md`)
