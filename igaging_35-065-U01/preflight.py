@@ -147,6 +147,11 @@ def main():
                     f"inputs, so either is fine).")
 
         # --- 4. divider sanity on the driven pin -------------------------------------
+        # SETTLE FIRST. The CH2 test above ends by switching CH1 back on, and measuring
+        # immediately catches the channel mid-settle: seen twice, reporting a ~0.36 V swing on a
+        # pin whose VPP was 3.2 V one step earlier. Worse, because VPP reads low at the same
+        # moment, the VTOP/VBASe-vs-VPP cross-check below is fooled into agreeing and stays quiet.
+        time.sleep(1.2)
         actual = moving[0] if len(moving) == 1 else args.clk_pin
         print(f"\n[4/4] divider check on the driven pin ({actual})")
         ch = PIN_CHANS[actual]
