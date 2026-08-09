@@ -1,0 +1,53 @@
+AWG  : RIGOL TECHNOLOGIES,DG902 Pro,DG9P285M00010,00.02.01.00.02
+SCOPE: RIGOL TECHNOLOGIES,DHO814,DHO8A260300728,00.01.04
+
+[control] pulsing pin 1 LOW via CH1; an armed trigger on pin 1 must fire.
+[control] trigger FIRED — detection path good
+
+Sweeping 32 combinations, 8s each (~6 min). Watching pin 3 for a falling edge through 1.5 V.
+
+button    mode           freq  duty   clkVPP  result
+--------------------------------------------------------------
+held      continuous     9000    50     2.97  -
+held      continuous     9000    20     2.92  -
+held      continuous     2000    50     2.85  -
+held      continuous     2000    20     2.90  -
+held      continuous      500    50     2.92  TRIGGERED  min=+2.73V  longest-low=0 samp  glitch (1-2 samples)
+held      continuous      500    20     2.91  -
+held      continuous      100    50     2.91  -
+held      continuous      100    20     2.92  -
+held      burst          9000    50     0.15  VOID (no clock on pin 2)
+held      burst          9000    20     0.12  VOID (no clock on pin 2)
+held      burst          2000    50     2.82  -
+held      burst          2000    20     2.85  -
+held      burst           500    50     2.95  -
+held      burst           500    20     2.87  -
+held      burst           100    50     2.94  -
+held      burst           100    20     2.91  -
+released  continuous     9000    50     2.89  -
+released  continuous     9000    20     2.87  -
+released  continuous     2000    50     2.84  -
+released  continuous     2000    20     2.85  -
+released  continuous      500    50     2.88  -
+released  continuous      500    20     2.91  -
+released  continuous      100    50     2.93  -
+released  continuous      100    20     2.90  -
+released  burst          9000    50     0.16  VOID (no clock on pin 2)
+released  burst          9000    20     2.89  -
+released  burst          2000    50     2.82  -
+released  burst          2000    20     2.82  -
+released  burst           500    50     2.83  -
+released  burst           500    20     2.88  -
+released  burst           100    50     2.91  -
+released  burst           100    20     2.94  -
+
+AWG + PSU OFF.
+
+==== RESULT ====
+  pin 3 was never pulled low, across all 32 combinations,
+  with a continuously-armed trigger (not the polling loop that produced the earlier
+  false negatives). This is the first trustworthy negative for the data interface.
+
+  Next: swap the roles — move AWG CH2 to pin 3 and re-run with
+  --clk-pin 3 --data-pin 2. If that is also negative,
+  the mic does not respond to an open-loop clock and the cable sniff is the way.

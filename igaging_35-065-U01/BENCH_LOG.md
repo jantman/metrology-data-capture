@@ -1028,6 +1028,62 @@ precisely what the sweep is looking for, and it means the **role swap matters** 
 clocking pin 3, not only the reverse. Still an inference; ringing Q1/Q2's collectors would confirm
 it, and that is now the main reason to open the case.
 
+### 11.20 Interface sweep, clock pin 2 / watch pin 3 — negative, and this one is trustworthy (2026-08-09)
+
+First search of the real interface with a trigger armed on a **data** pin — the gap §11.19
+identified. `interface_sweep.py`, unattended, button synthesised by driving pin 1 low.
+
+**Setup.** Pull-ups 10 kΩ on pins 1/2/3; AWG CH1 → 1 k → pin 1 (LOW = button held); CH2 → 1 k →
+pin 2 (clock); scope armed on **pin 3**, falling through 1.5 V, for the whole 8 s dwell.
+Pre-flight passed beforehand (rail 3.010 V, all pull-ups present, each channel driving only its
+own pin, divider as predicted).
+
+**Coverage: 32 combinations** — button held/released × 9 k/2 k/500/100 Hz × 50 %/20 % duty ×
+continuous/burst. The positive control (pulse pin 1 low, confirm an armed trigger fires) fired on
+both runs, so the detection path was proven before any negative was recorded, and every
+combination verified the clock was really present on pin 2 before arming.
+
+**Result: pin 3 was never pulled low.** One spurious trigger (held / continuous / 500 Hz / 50 %)
+was correctly classified as a glitch — captured min +2.73 V, longest-low 0 samples, i.e. it never
+actually crossed the threshold. The glitch discriminator did its job.
+
+#### A script bug that made the first pass overstate its coverage
+
+The first run used a **fixed 10 ms burst period** while burst length is `ncycles/freq`:
+
+| freq | burst length | vs a fixed 10 ms period |
+|---|---|---|
+| 9000 Hz | 2.33 ms | genuine burst + 7.7 ms gap ✓ |
+| 2000 Hz | **10.50 ms** | longer than the period ⇒ **effectively continuous** |
+| 500 Hz | 42 ms | continuous |
+| 100 Hz | 210 ms | continuous |
+
+So only the 9 kHz rows were genuine bursts — and **three of those four were marked VOID** by the
+clock-present guard, which measured VPP over a 0.22 ms window that usually landed in the idle gap.
+That is precisely the §11.8 trap ("digitising ONE window can miss a burst — it lands in the idle
+gap"), quoted in the script's own docstring and then walked into. Genuine burst coverage in pass
+one was **1 combination out of a nominal 16**.
+
+Fixed both: the period is now `ncycles/freq + gap` (7 ms default, so 9.33 / 17.50 / 49.00 /
+217.00 ms), and the guard window spans **two whole burst periods** and takes the max of three
+measurements. The burst axis was then re-run in full — 16 combinations, all with a verified clock,
+all negative.
+
+#### What this does and does not establish
+
+**Does:** clocking **pin 2** while watching **pin 3** produces no response, across rate, duty,
+framing and button state, with a continuously-armed trigger rather than the VMIN polling loop
+behind three earlier false negatives. This is the first trustworthy negative for the data
+interface.
+
+**Does not** — still untested:
+- **The role swap.** Only pin 3 has ever been watched. If Q1/Q2 drive pins 2 and 3 (§11.19's
+  inference), pin 2 is just as likely to be the output. Needs CH2 moved to pin 3, then
+  `--clk-pin 3 --data-pin 2`. **This is the immediate next step.**
+- **100 kΩ pull-ups.** At 10 kΩ a weak driver could be held near the rail (`review.md` §5.7a).
+- **Amplitudes below 3 V**, and coordinated two-input drive (which needs a third source, since
+  CH1 is now the button).
+
 ---
 
 ## Remaining phases (carried over from the retired `BRINGUP_PLAN.md`)

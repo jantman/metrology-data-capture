@@ -130,10 +130,13 @@ reason to open the case (step 7).
    ```
    **No test has ever armed a trigger on a data pin during a clocked read** — §11.12 used the
    broken VMIN polling loop and §11.16 always triggered on pin 1, i.e. on the button.
-   **`interface_sweep.py`** does it: 32 combinations of button held/released × 9k/2k/500/100 Hz ×
-   50 %/20 % duty × continuous/burst, ~5 min unattended, with a positive control on the detection
-   path and a clock-present guard per combination. If negative, swap AWG CH2 to pin 3 and re-run
-   with `--clk-pin 3 --data-pin 2`.
+   ~~**`interface_sweep.py`**~~ **DONE 2026-08-09 — NEGATIVE** (§11.20). All 32 combinations
+   (button held/released × 9k/2k/500/100 Hz × 50/20 % duty × continuous/burst), positive control
+   fired, clock verified per combination: **pin 3 was never pulled low.** Trustworthy, unlike the
+   earlier polling-loop negatives.
+   **→ NEXT: the role swap.** Move AWG CH2 from pin 2 to **pin 3**, then
+   `python interface_sweep.py --clk-pin 3 --data-pin 2`. Only pin 3 has ever been watched, and if
+   Q1/Q2 drive pins 2 and 3 then pin 2 is equally likely to be the output.
 3. **Redo the decisive tests at 100 kΩ** rather than 10 kΩ pull-ups (`review.md` §5.7a). Q1/Q2's
    330 kΩ base resistors cap the sink at ~0.7 mA against the 0.3 mA a 10 kΩ pull-up demands — only
    ~2× margin, so a weakly-driven pin could read as "held at the rail". Cheap insurance if step 2

@@ -80,7 +80,11 @@ def main():
     ap.add_argument("--amp", type=float, default=3.0)
     ap.add_argument("--thresh", type=float, default=1.5, help="data-pin falling trigger level")
     ap.add_argument("--ncycles", type=int, default=21)
-    ap.add_argument("--period-ms", type=float, default=10.0)
+    ap.add_argument("--gap-ms", type=float, default=7.0,
+                    help="IDLE GAP after each burst. The burst PERIOD is computed as "
+                         "ncycles/freq + gap, never a fixed value: at 2 kHz a 21-cycle burst is "
+                         "already 10.5 ms long, so a fixed 10 ms period makes it run continuously "
+                         "and the burst axis silently tests nothing.")
     ap.add_argument("--rail", type=float, default=3.0)
     ap.add_argument("--ilim", type=float, default=0.02)
     ap.add_argument("--ovp", type=float, default=3.6)
@@ -153,7 +157,9 @@ def main():
                 awg.write(":SOURce2:BURSt:STATe ON")
                 awg.write(":SOURce2:BURSt:MODE TRIGgered")
                 awg.write(f":SOURce2:BURSt:NCYCles {args.ncycles}")
-                awg.write(f":SOURce2:BURSt:INTernal:PERiod {args.period_ms/1000.0}")
+                burst_s = args.ncycles / freq
+                period_s = burst_s + args.gap_ms / 1000.0
+                awg.write(f":SOURce2:BURSt:INTernal:PERiod {period_s:g}")
                 awg.write(":TRIGger2:SOURce IMMediate")
                 awg.write(":SOURce1:BURSt:STATe OFF")
             else:
@@ -162,15 +168,24 @@ def main():
             awg.output(True, ch=2)
             time.sleep(0.5)
 
-            # clock-present guard
+            # Clock-present guard. The window MUST span at least one whole burst period —
+            # a short window lands in the idle gap most of the time and reports "no clock"
+            # for a perfectly good burst train (the §11.8 trap).
+            if mode == "burst":
+                guard_tb = 2.0 * period_s / 10.0
+            else:
+                guard_tb = max(2e-5, 2.0 / freq / 10)
             scope.write(":TRIGger:SWEep AUTO"); scope.write(":RUN")
-            scope.write(f":TIMebase:MAIN:SCALe {max(2e-5, 2.0/freq/10):g}")
+            scope.write(f":TIMebase:MAIN:SCALe {guard_tb:g}")
             time.sleep(0.8)
-            clk_vpp = scope.measure_item(clk_ch, "VPP")
+            clk_vpp = max(scope.measure_item(clk_ch, "VPP") for _ in range(3))
             if clk_vpp < 1.0:
                 log(f"{button:9} {mode:11} {freq:7.0f} {duty:5.0f}  {clk_vpp:7.2f}  "
                     f"VOID (no clock on pin {args.clk_pin})")
                 continue
+            if mode == "burst":
+                log(f"    (burst {burst_s*1e3:.2f} ms + {args.gap_ms:g} ms gap "
+                    f"= {period_s*1e3:.2f} ms period)")
 
             scope.arm_single(trig_ch=data_ch, level=args.thresh, slope="NEGative",
                              mdepth=10_000, tb_scale=0.005, sweep="NORMal")
