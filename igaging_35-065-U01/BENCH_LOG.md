@@ -1276,6 +1276,42 @@ three earlier false negatives were all caught precisely because that validation 
 3. Role swap at 100 kΩ (one lead move) and coordinated two-input drive (needs a third source).
    Low expected value now; not worth delaying the purchase for.
 
+### 11.24 Role swap at 100 kΩ — negative. The matrix is complete (2026-08-09)
+
+AWG CH2 moved pin 3 → pin 2; the last untested cell from §11.23. Clocking **pin 2**, watching
+**pin 3**, 100 kΩ pull-ups, 32 combinations. **Pin 3 was never pulled low.** Positive control
+fired, clock verified throughout, no spurious triggers despite the watched pin carrying 0.80 V of
+crosstalk (dipping to ~2.34 V against a 1.5 V threshold).
+
+Awake window self-audited from the log, which now stamps both ends: woken ~18:17, run 18:18:15 →
+18:23:39, auto-off due ~18:45 — roughly 21 minutes of margin.
+
+**Final tally: 160 combinations, all negative.**
+
+| rail | pull-up | clocked → watched | combos |
+|---|---|---|---|
+| 3.0 V | 10 kΩ | pin 2 → pin 3 | 32 |
+| 3.0 V | 10 kΩ | pin 3 → pin 2 | 32 |
+| 1.8 V | 10 kΩ | pin 3 → pin 2 | 16 |
+| 2.4 V | 10 kΩ | pin 3 → pin 2 | 16 |
+| 3.0 V | 100 kΩ | pin 3 → pin 2 | 32 |
+| **3.0 V** | **100 kΩ** | **pin 2 → pin 3** | **32** |
+
+Both wire assignments, at both pull-up strengths, across three rail voltages, 100 Hz–9 kHz, 50 %
+and 20 % duty, continuous and burst-framed, button held and released. Every run with an armed
+trigger on the watched pin, a verified clock on the driven one, and a positive control proving the
+detection path before any negative was recorded.
+
+**§11.23's conclusion stands and is now unqualified: the mic does not respond to an open-loop
+clock.** Nothing in the identified parameter space remains untested.
+
+One preflight bug was found and fixed in the course of this (see the commit): step 4 measured the
+driven pin immediately after the CH2 test switched CH1 back on, catching it mid-settle and
+reporting a 0.36 V swing on a pin whose VPP was 3.2 V. The VPP cross-check added earlier did not
+catch it, because VPP reads low at that same instant — the guard had been working by luck of
+timing on the previous run rather than by design. Step 3, which is the check that actually
+verifies the rig, settles properly and was never affected.
+
 ---
 
 ## Remaining phases (carried over from the retired `BRINGUP_PLAN.md`)

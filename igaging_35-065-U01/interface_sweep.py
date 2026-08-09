@@ -243,9 +243,11 @@ def main():
         log(f"  pin {args.data_pin} was never pulled low, across all {len(combos)} combinations,")
         log("  with a continuously-armed trigger (not the polling loop that produced the earlier")
         log("  false negatives). This is the first trustworthy negative for the data interface.")
-        log(f"\n  Next: swap the roles — move AWG CH2 to pin {args.data_pin} and re-run with")
-        log(f"  --clk-pin {args.data_pin} --data-pin {args.clk_pin}. If that is also negative,")
-        log("  the mic does not respond to an open-loop clock and the cable sniff is the way.")
+        log(f"\n  If the reverse assignment (--clk-pin {args.data_pin} --data-pin {args.clk_pin}),")
+        log("  100k pull-ups and lower rail voltages have ALSO been tried, the matrix is complete")
+        log("  and the mic does not respond to an open-loop clock — see BENCH_LOG §11.24, where")
+        log("  all of that came back negative across 160 combinations. The cable sniff is then the")
+        log("  way, and re-running this in another configuration adds nothing.")
     if _log:
         _log.close()
 

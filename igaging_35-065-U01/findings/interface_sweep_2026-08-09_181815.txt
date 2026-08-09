@@ -1,0 +1,75 @@
+AWG  : RIGOL TECHNOLOGIES,DG902 Pro,DG9P285M00010,00.02.01.00.02
+SCOPE: RIGOL TECHNOLOGIES,DHO814,DHO8A260300728,00.01.04
+
+RUN 2026-08-09_181815
+  clk pin 2 | data pin 3 (watched) | button pin 1
+  rail 3 V | amp 3 V | trigger 1.5 V falling
+  freqs 9000,2000,500,100 Hz | duties 50,20 % | modes continuous,burst | buttons held,released
+  burst 21 cycles + 7 ms gap | dwell 8 s
+
+[control] pulsing pin 1 LOW via CH1; an armed trigger on pin 1 must fire.
+[control] trigger FIRED — detection path good
+
+Sweeping 32 combinations, 8s each (~6 min). Watching pin 3 for a falling edge through 1.5 V.
+
+button    mode           freq  duty   clkVPP  result
+--------------------------------------------------------------
+held      continuous     9000    50     3.27  -
+held      continuous     9000    20     3.18  -
+held      continuous     2000    50     3.04  -
+held      continuous     2000    20     3.04  -
+held      continuous      500    50     3.05  -
+held      continuous      500    20     3.04  -
+held      continuous      100    50     3.05  -
+held      continuous      100    20     3.05  -
+    (burst 2.33 ms + 7 ms gap = 9.33 ms period)
+held      burst          9000    50     3.05  -
+    (burst 2.33 ms + 7 ms gap = 9.33 ms period)
+held      burst          9000    20     3.06  -
+    (burst 10.50 ms + 7 ms gap = 17.50 ms period)
+held      burst          2000    50     3.04  -
+    (burst 10.50 ms + 7 ms gap = 17.50 ms period)
+held      burst          2000    20     3.03  -
+    (burst 42.00 ms + 7 ms gap = 49.00 ms period)
+held      burst           500    50     3.04  -
+    (burst 42.00 ms + 7 ms gap = 49.00 ms period)
+held      burst           500    20     3.03  -
+    (burst 210.00 ms + 7 ms gap = 217.00 ms period)
+held      burst           100    50     3.03  -
+    (burst 210.00 ms + 7 ms gap = 217.00 ms period)
+held      burst           100    20     3.03  -
+released  continuous     9000    50     3.06  -
+released  continuous     9000    20     3.07  -
+released  continuous     2000    50     3.04  -
+released  continuous     2000    20     3.04  -
+released  continuous      500    50     3.04  -
+released  continuous      500    20     3.04  -
+released  continuous      100    50     3.06  -
+released  continuous      100    20     3.06  -
+    (burst 2.33 ms + 7 ms gap = 9.33 ms period)
+released  burst          9000    50     3.06  -
+    (burst 2.33 ms + 7 ms gap = 9.33 ms period)
+released  burst          9000    20     3.07  -
+    (burst 10.50 ms + 7 ms gap = 17.50 ms period)
+released  burst          2000    50     3.05  -
+    (burst 10.50 ms + 7 ms gap = 17.50 ms period)
+released  burst          2000    20     3.04  -
+    (burst 42.00 ms + 7 ms gap = 49.00 ms period)
+released  burst           500    50     3.05  -
+    (burst 42.00 ms + 7 ms gap = 49.00 ms period)
+released  burst           500    20     3.05  -
+    (burst 210.00 ms + 7 ms gap = 217.00 ms period)
+released  burst           100    50     3.04  -
+    (burst 210.00 ms + 7 ms gap = 217.00 ms period)
+released  burst           100    20     3.04  -
+
+AWG + PSU OFF.  finished 2026-08-09 18:23:39
+
+==== RESULT ====
+  pin 3 was never pulled low, across all 32 combinations,
+  with a continuously-armed trigger (not the polling loop that produced the earlier
+  false negatives). This is the first trustworthy negative for the data interface.
+
+  Next: swap the roles — move AWG CH2 to pin 3 and re-run with
+  --clk-pin 3 --data-pin 2. If that is also negative,
+  the mic does not respond to an open-loop clock and the cable sniff is the way.
