@@ -1192,6 +1192,78 @@ from the mic's own rail, so at 3 V `Ib ≈ 7 µA` and `Ic(max) ≈ 0.7 mA` again
 the edge. **A weak driver would be masked precisely in the low-voltage runs above.** The 100 kΩ
 swap is therefore not an alternative to these tests; it is the test that makes them conclusive.
 
+### 11.23 100 kΩ pull-ups — also negative. Open-loop RE is finished (2026-08-09)
+
+The last identified variable, and the one `review.md` §5.7a called the strongest remaining
+explanation for a false negative. All three pull-ups swapped 10 kΩ → 100 kΩ. Result: **pin 2 was
+never pulled low across 32 combinations.** Positive control fired; clock verified every time.
+
+**Why this closes the question rather than adding another negative.** The concern was that Q1/Q2's
+330 kΩ base resistors cap their sink current, so a weak driver could be held near the rail. At
+10 kΩ the pull-up demands 300 µA against a ~330 µA capability at a 1.8 V internal rail — genuinely
+marginal. **At 100 kΩ it demands 30 µA, an 11× margin even in the worst case.** Any driver capable
+of pulling the line at all would now be visible, at any plausible internal rail. The hypothesis is
+dead, and low-rail × 100 kΩ does not need testing separately.
+
+#### Two rig discoveries from the swap
+
+**Scope probes load the node.** The DHO814's 1× passive probes are ~1 MΩ to ground — invisible
+against 10 kΩ (1 % shift) but not against 100 kΩ. Measured idle levels matched the divider model
+to within 6 mV: pins 2/3 at 2.74 V (one probe each), **pin 1 at 2.51 V because scope CH4 sits on
+the AWG output and reaches pin 1 through the 1 kΩ series resistor, so that node carries two
+probes.** `preflight.py` now models this (`--pullup-k`, `--probe-mohm`) instead of expecting the
+bare rail, and its divider check cross-checks VTOP/VBASe against VPP — at 100 kΩ they returned a
+plausible-but-wrong 2.68/2.48 on a pin whose VPP was 3.20, so it now falls back to VMAX/VMIN.
+
+**There is no rig-side awake detector.** `mic_state_monitor.py` sampled all three pins ~12×/s for
+90 s while the mic was switched on partway through. Over 500 samples before and 450 after:
+
+| | mic OFF | mic ON | delta |
+|---|---|---|---|
+| pin 1 | 2.5056 V | 2.5053 V | −0.3 mV |
+| pin 2 | 2.7343 V | 2.7342 V | −0.1 mV |
+| pin 3 | 2.7435 V | 2.7434 V | −0.1 mV |
+
+Per-sample noise is 0.8–0.9 mV, so every delta is an order of magnitude below the noise floor.
+Idle level is set purely by our pull-up/probe divider and is **completely independent of the mic's
+power state**. The §11.21 gap stands: only the LCD can confirm awake. (Also established: **off and
+asleep are the same state** on this mic, and **auto-off is ~27 min** — sharper than §11.7's "tens
+of minutes".)
+
+*Unexplained, recorded not chased:* one voided reading during a state change showed pin 3 at
+1.53 V across three consistent samples. The controlled power-on test above shows nothing
+comparable, so it was most likely a handling artefact — but it has no explanation.
+
+#### Running total: 128 combinations, all negative
+
+| rail | pull-up | clocked → watched | combos |
+|---|---|---|---|
+| 3.0 V | 10 kΩ | pin 2 → pin 3 | 32 |
+| 3.0 V | 10 kΩ | pin 3 → pin 2 | 32 |
+| 1.8 V | 10 kΩ | pin 3 → pin 2 | 16 |
+| 2.4 V | 10 kΩ | pin 3 → pin 2 | 16 |
+| **3.0 V** | **100 kΩ** | **pin 3 → pin 2** | **32** |
+
+Each with an armed trigger on the watched pin, a verified clock on the driven one, and a positive
+control on the detection path.
+
+#### Conclusion: blind open-loop reverse engineering is finished on this unit
+
+**The mic does not respond to an open-loop clock**, on either wire, at any rate from 100 Hz to
+9 kHz, at 50 % or 20 % duty, continuous or burst-framed, with the button held or released, at
+three rail voltages, at both pull-up strengths. Unlike §11.12's "exhausted" and §11.16's "reached
+its limit", this negative rests on instrumentation that has been validated at every step — and the
+three earlier false negatives were all caught precisely because that validation was added.
+
+**Genuinely remaining, in descending value:**
+1. **The `100-700-USB-MC` cable sniff** — `review.md` §11.2/§8. Ohm the adapter out first; if it is
+   passive, the complete pinout including any REQ falls out for free. Then sniff in-line and
+   correlate frames against the decimal string the HID keyboard types.
+2. **A logic analyzer (~$15)** first regardless — the 1000-point screen read has limited every
+   capture in this project.
+3. Role swap at 100 kΩ (one lead move) and coordinated two-input drive (needs a third source).
+   Low expected value now; not worth delaying the purchase for.
+
 ---
 
 ## Remaining phases (carried over from the retired `BRINGUP_PLAN.md`)

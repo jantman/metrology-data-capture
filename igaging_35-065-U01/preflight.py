@@ -41,6 +41,16 @@ def main():
     ap.add_argument("--rail", type=float, default=3.0)
     ap.add_argument("--ilim", type=float, default=0.02)
     ap.add_argument("--ovp", type=float, default=3.6)
+    ap.add_argument("--pullup-k", type=float, default=10.0,
+                    help="pull-up resistance in kOhm (default 10). The divider prediction in "
+                         "step 4 depends on it: pin_low = rail*Rs/(Rs+Rpu), so a 100k pull-up "
+                         "gives ~0.03 V rather than ~0.27 V and the printed prediction would "
+                         "otherwise be wrong.")
+    ap.add_argument("--series-k", type=float, default=1.0, help="AWG series resistance, kOhm")
+    ap.add_argument("--probe-mohm", type=float, default=1.0,
+                    help="scope passive-probe input resistance, MOhm (DHO814 1x = 1 MOhm). "
+                         "Negligible against a 10k pull-up but NOT against 100k, where it drags "
+                         "the idle level well below the rail.")
     ap.add_argument("--max-volts", type=float, default=3.0)
     args = ap.parse_args()
     if args.amp > args.max_volts:
@@ -61,19 +71,31 @@ def main():
         st = psu.bring_up(args.rail, args.ilim, ovp=args.ovp)
 
         # --- 2. pull-ups, AWG off ----------------------------------------------------
-        print(f"\n[2/4] AWG OFF — all three pins should sit at ~{args.rail:g} V via their 10k "
-              f"pull-ups")
+        # Expected idle is NOT the bare rail: each scope probe is ~1 MOhm to ground and forms a
+        # divider with the pull-up. At 10k that is a 1% effect and invisible; at 100k it pulls the
+        # pin to ~0.91*rail, which looks exactly like a missing pull-up if you do not model it.
+        rpu_m = args.pullup_k / 1000.0
+        exp_one = args.rail * args.probe_mohm / (args.probe_mohm + rpu_m)
+        # Pin 1 carries a second 1 MOhm path: scope CH4 sits on the AWG output, reachable through
+        # the 1k series resistor, so pin 1 sees two probes in parallel.
+        exp_two = args.rail * (args.probe_mohm / 2) / (args.probe_mohm / 2 + rpu_m)
+        tol = max(RAIL_TOL, 0.08 * args.rail)
+        print(f"\n[2/4] AWG OFF — pins should sit near {exp_one:.2f} V "
+              f"({args.pullup_k:g}k pull-up against a {args.probe_mohm:g} MOhm probe), or "
+              f"{exp_two:.2f} V where a second probe loads the node")
         awg.output(False, ch=1); awg.output(False, ch=2)
         time.sleep(0.5)
         for p in (1, 2, 3):
             v = scope.measure_vavg(PIN_CHANS[p])
             idle[p] = v
-            ok = abs(v - args.rail) <= RAIL_TOL
-            print(f"      pin {p}: VAVG {v:+.3f} V   {'OK' if ok else '<-- NOT AT RAIL'}")
+            ok = min(abs(v - exp_one), abs(v - exp_two)) <= tol
+            near = "1 probe" if abs(v - exp_one) < abs(v - exp_two) else "2 probes"
+            print(f"      pin {p}: VAVG {v:+.3f} V   {'OK (' + near + ')' if ok else '<-- OFF'}")
             if not ok:
                 problems.append(
-                    f"pin {p} idles at {v:+.3f} V, not ~{args.rail:g} V — missing/open 10k "
-                    f"pull-up, or a bad breakout contact on that pin")
+                    f"pin {p} idles at {v:+.3f} V, expected ~{exp_one:.2f} V (or ~{exp_two:.2f} V "
+                    f"with a second probe on the node) — missing/open {args.pullup_k:g}k pull-up, "
+                    f"or a bad breakout contact")
 
         # --- 3. which pin actually moves? --------------------------------------------
         scope.write(":TRIGger:SWEep AUTO"); scope.write(":RUN")
@@ -92,6 +114,10 @@ def main():
         awg.square(args.freq, low=0.0, high=args.amp, ch=1)
         awg.output(True, ch=1); awg.output(False, ch=2)
         moving = swinging("CH1 only: ")
+        if args.pullup_k >= 50:
+            print(f"      (note: at {args.pullup_k:g}k the pins are high-impedance, so crosstalk "
+                  f"into the undriven pins will be much larger than at 10k — watch the numbers "
+                  f"above, they set the usable trigger threshold for the sweep.)")
         driven = {p: 0.0 for p in (1, 2, 3)}
 
         if args.clk2_pin:
@@ -124,23 +150,30 @@ def main():
         actual = moving[0] if len(moving) == 1 else args.clk_pin
         print(f"\n[4/4] divider check on the driven pin ({actual})")
         ch = PIN_CHANS[actual]
+        vpp_drv = scope.measure_item(ch, "VPP")
         try:
             hi = scope.measure_item(ch, "VTOP")
-        except RuntimeError:
-            hi = scope.measure_item(ch, "VMAX")
-        try:
             lo = scope.measure_item(ch, "VBASe")
         except RuntimeError:
+            hi = lo = None
+        # VTOP/VBASe pick the two most common levels and can return a plausible-but-wrong pair on
+        # a ringing high-impedance node — seen at 100k, reporting 2.68/2.48 on a pin whose VPP was
+        # 3.20. Cross-check against VPP and fall back to raw peak/trough if they disagree.
+        if hi is None or lo is None or abs((hi - lo) - vpp_drv) > 0.3 * max(vpp_drv, 0.1):
+            hi = scope.measure_item(ch, "VMAX")
             lo = scope.measure_item(ch, "VMIN")
-        pred_hi = (10 * args.amp + args.rail) / 11
-        pred_lo = args.rail / 11
+            print("      (VTOP/VBASe inconsistent with VPP — using VMAX/VMIN)")
+        rpu, rs = args.pullup_k, args.series_k
+        pred_hi = (rpu * args.amp + rs * args.rail) / (rpu + rs)
+        pred_lo = args.rail * rs / (rpu + rs)
         print(f"      measured  high {hi:+.2f} V   low {lo:+.2f} V")
-        print(f"      predicted high {pred_hi:+.2f} V   low {pred_lo:+.2f} V   (1k/10k divider)")
+        print(f"      predicted high {pred_hi:+.2f} V   low {pred_lo:+.2f} V   "
+              f"({rs:g}k/{rpu:g}k divider)")
         if abs(hi - pred_hi) > 0.5:
             problems.append(
                 f"driven-pin HIGH is {hi:.2f} V but the 1k/10k divider predicts {pred_hi:.2f} V. "
-                f"If it is much HIGHER, the 10k pull-up on that pin may be missing; if much "
-                f"LOWER, the series resistor may be larger than 1k.")
+                f"If it is much HIGHER, the {rpu:g}k pull-up on that pin may be missing; if much "
+                f"LOWER, the series resistor may be larger than {rs:g}k.")
     finally:
         try:
             awg.output(False, ch=1); awg.output(False, ch=2)

@@ -2,6 +2,10 @@
 
 **Last updated:** 2026-08-09. Start here; everything else is detail.
 
+> **Bottom line: blind open-loop reverse engineering is finished on this unit.** 128 clock-injection
+> combinations, all negative, with validated instrumentation (§11.20–§11.23). The remaining path is
+> the `100-700-USB-MC` cable sniff, preceded by a ~$15 logic analyzer.
+
 ## Where this stands
 
 **The mic has never been observed to drive any connector pin.** Every apparent "device response"
