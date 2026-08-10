@@ -8,3 +8,6 @@ mxmoonfree_LS-20-6/reverse-engineering/gt_[A-F]_ch[12].bin
 
 # iGaging 35-065-U01 clock-injection raw captures (result documented in text)
 igaging_35-065-U01/captures/
+
+# Mitutoyo SPC raw scope captures (~2 MB per frame); decoded results live in gt_log.csv
+mitutoyo_500-171-30_digimatic_calipers/findings/*.bin
